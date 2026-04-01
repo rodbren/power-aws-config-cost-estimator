@@ -11,18 +11,14 @@
       "command": "uvx",
       "args": ["awslabs.aws-core-mcp-server@latest"],
       "env": {
-        "FASTMCP_LOG_LEVEL": "ERROR",
-        "AWS_PROFILE": "${AWS_PROFILE}",
-        "AWS_REGION": "${AWS_REGION}"
+        "FASTMCP_LOG_LEVEL": "ERROR"
       }
     },
     "aws-knowledge": {
       "command": "uvx",
       "args": ["awslabs.aws-knowledge-base-retrieval-mcp-server@latest"],
       "env": {
-        "FASTMCP_LOG_LEVEL": "ERROR",
-        "AWS_PROFILE": "${AWS_PROFILE}",
-        "AWS_REGION": "${AWS_REGION}"
+        "FASTMCP_LOG_LEVEL": "ERROR"
       }
     }
   }
