@@ -204,16 +204,22 @@ The **total event count** per group represents the estimated number of CIs (ever
 ### For Periodic Recording Estimate
 Periodic recording charges **1 CI per unique resource per day**, regardless of how many times that resource changed. To estimate this:
 
-1. Query **1 day** of CloudTrail data (not the full 7-day window)
-2. Extract the **resource ID** from each event. CloudTrail events contain resource identifiers in:
+1. **Ask the user which day** they want to use for the daily sample. Default to **yesterday** if not specified. The user may want to pick a typical business day vs. a weekend or maintenance window day for more representative results.
+2. Query **that single day** of CloudTrail data
+3. Extract the **resource ID** from each event. CloudTrail events contain resource identifiers in:
    - `resources[].ARN` — the primary source for resource IDs
    - `requestParameters` — contains resource-specific identifiers (e.g., `instanceId`, `bucketName`, `functionName`)
    - `responseElements` — for create events where the resource ID is returned
-3. Count **distinct resource IDs per eventSource per account per region** for that single day
-4. That count = the number of CIs Config would record per day under periodic recording
-5. Multiply by **30** for the monthly estimate
+4. Count **distinct resource IDs per eventSource per account per region** for that single day
+5. Present the results at multiple time horizons:
+   - **Daily**: unique resource count (actual data)
+   - **Weekly**: daily count × 7 (forecasted)
+   - **Monthly**: daily count × 30 (forecasted)
 
 **Important**: The periodic estimate must be based on **unique resource IDs**, not total events. A single EC2 instance modified 50 times in a day = 1 CI under periodic, but 50 CIs under continuous.
+
+**Disclaimer**: Always include this disclaimer for periodic estimates:
+> ⚠️ **Forecasting disclaimer**: The weekly and monthly periodic estimates are projections based on a single day's data (YYYY-MM-DD). Actual costs will vary depending on daily resource activity patterns. For higher accuracy, the user can re-run this analysis on different days (e.g., weekday vs. weekend, peak vs. off-peak) and compare results. The day chosen significantly impacts the forecast — a maintenance day will show higher activity than a typical day.
 
 ## Step 5: Calculate Estimated Cost
 
@@ -243,14 +249,16 @@ Estimated Monthly CIs = TotalEvents_in_period × Extrapolation Factor
 Estimated Monthly Cost = Estimated Monthly CIs × $0.003
 
 --- PERIODIC ---
-(Use 1 day of data only)
+(Use 1 day of data — user chooses the day, default: yesterday)
 Unique Resources Per Day = COUNT(DISTINCT resource_id) per eventSource/account/region
+Estimated Weekly CIs  = Unique Resources Per Day × 7
 Estimated Monthly CIs = Unique Resources Per Day × 30
+Estimated Weekly Cost  = Estimated Weekly CIs × $0.012
 Estimated Monthly Cost = Estimated Monthly CIs × $0.012
 ```
 
 **Always present both continuous and periodic estimates** so the customer can compare.
-**Always show the extrapolation factor, days queried, and for periodic: the single day used and unique resource count.**
+**Always show the extrapolation factor, days queried, and for periodic: the specific day used, unique resource count, and the forecasting disclaimer.**
 
 ## Step 6: Present Results
 
@@ -266,13 +274,15 @@ Format the output as two tables:
 | **TOTAL** | | | **X** | **Y** | **$A.AA** |
 
 ### Periodic Recording Estimate
-**Sample day**: YYYY-MM-DD | **Unique resources counted per day, × 30 for monthly**
+**Sample day**: YYYY-MM-DD (user-selected) | **Unique resources per day, projected to weekly and monthly**
 
-| Account ID | Region | Event Source | Unique Resources (1 day) | Est. Monthly CIs | Est. Monthly Cost |
-|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | ec2.amazonaws.com | 45 | 1,350 | $16.20 |
-| ... | ... | ... | ... | ... | ... |
-| **TOTAL** | | | **X** | **Y** | **$B.BB** |
+> ⚠️ **Forecasting disclaimer**: Weekly and monthly projections are based on a single day's data. Actual costs vary by daily activity. Re-run on different days for higher accuracy.
+
+| Account ID | Region | Event Source | Unique Resources (1 day) | Est. Weekly CIs | Est. Monthly CIs | Est. Weekly Cost | Est. Monthly Cost |
+|---|---|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | ec2.amazonaws.com | 45 | 315 | 1,350 | $3.78 | $16.20 |
+| ... | ... | ... | ... | ... | ... | ... | ... |
+| **TOTAL** | | | **X** | **Y** | **Z** | **$A.AA** | **$B.BB** |
 
 Then provide:
 1. **Total estimated monthly cost** for continuous recording
