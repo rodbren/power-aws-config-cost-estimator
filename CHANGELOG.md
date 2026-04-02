@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.1.1 (2026-04-02)
+- Renamed service references from "AWS Security Hub" to "AWS Security Hub CSPM" for clarity per official naming
+- Config rule prefixes (`securityhub-*`) unchanged — only service name references updated
+
 ## v2.1.0 (2026-04-02)
 - **Account/region breakdown**: Optimization report now shows top CI contributors per account and region with % of total spend
 - **Full AWS:: resource type names**: All outputs use `AWS::EC2::Instance`, `AWS::S3::Bucket`, etc. instead of generic service names
