@@ -76,12 +76,14 @@ monthly_savings         = current_continuous_cost - proposed_periodic_cost
 
 ### Example analysis output per resource type
 
-| Resource Type eventSource | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings |
+**Always use full `AWS::Service::ResourceType` names**, not generic service names.
+
+| Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings |
 |---|---|---|---|---|---|
-| ec2.amazonaws.com | 500 | 45 | 11.1× | ✅ Switch to periodic | $33.30 |
-| s3.amazonaws.com | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 (periodic costs more) |
-| lambda.amazonaws.com | 200 | 50 | 4.0× | ⚠️ Borderline | $0.00 (break-even) |
-| iam.amazonaws.com | 150 | 120 | 1.25× | ❌ Keep continuous | -$32.40 (periodic costs more) |
+| `AWS::EC2::SecurityGroup` | 500 | 45 | 11.1× | ✅ Switch to periodic | $33.30 |
+| `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 (periodic costs more) |
+| `AWS::Lambda::Function` | 200 | 50 | 4.0× | ⚠️ Borderline | $0.00 (break-even) |
+| `AWS::IAM::Role` | 150 | 120 | 1.25× | ❌ Keep continuous | -$32.40 (periodic costs more) |
 
 ### Important: Query the right days
 - Query **at least 7 days** for a representative sample
@@ -230,8 +232,50 @@ Set lifecycle policies on Config S3 bucket. Review if you need both snapshots an
 ### Rule evaluation hygiene
 Avoid frequent `DeleteEvaluationResults` / `StartConfigRulesEvaluation` — each generates new CIs. When deleting rules with many resources: stop compliance recording → delete rules → restart.
 
-### Indirect relationships
-Some older resource types generate extra CIs. Contact TAM to opt out if significant.
+### Indirect Relationships — Hidden CI Multiplier
+
+Indirect relationships generate **extra CIs** when related resources change. This is a significant hidden cost driver, especially for EC2/VPC resources.
+
+#### How it works
+- **Direct** (A→B): Change to security group → CI for security group + CI for EC2 instance
+- **Indirect** (B→A): Change to EC2 instance → CI for EC2 instance + CI for security group
+
+#### Full indirect relationship CI generation table
+Changes to these resource types generate **additional CIs** for the related types:
+
+| Change to this resource type | Generates extra CIs for |
+|---|---|
+| `AWS::EC2::RouteTable` | `AWS::EC2::Instance`, `AWS::EC2::NetworkInterface`, `AWS::EC2::Subnet`, `AWS::EC2::VPNGateway`, `AWS::EC2::VPC` |
+| `AWS::EC2::EIP` | `AWS::EC2::Instance`, `AWS::EC2::NetworkInterface` |
+| `AWS::EC2::Instance` | `AWS::EC2::SecurityGroup`, `AWS::EC2::Subnet`, `AWS::EC2::VPC` |
+| `AWS::EC2::NetworkInterface` | `AWS::EC2::SecurityGroup`, `AWS::EC2::Subnet`, `AWS::EC2::VPC` |
+| `AWS::EC2::NetworkACL` | `AWS::EC2::Subnet`, `AWS::EC2::VPC` |
+| `AWS::EC2::VPNConnection` | `AWS::EC2::VPNGateway`, `AWS::EC2::CustomerGateway` |
+| `AWS::EC2::InternetGateway` | `AWS::EC2::VPC` |
+| `AWS::EC2::SecurityGroup` | `AWS::EC2::VPC` |
+| `AWS::EC2::Subnet` | `AWS::EC2::VPC` |
+| `AWS::EC2::VPNGateway` | `AWS::EC2::VPC` |
+
+#### Services that depend on indirect relationships
+- **`ec2-security-group-attached-to-eni`** Config managed rule — needs indirect relationships to check if non-default security groups are attached to ENIs
+- **AWS Firewall Manager** Usage Audit Security Group policy — uses indirect relationships to determine when a security group was last used
+- **Default VPC resources** — without indirect relationships, default resources (security groups, NACLs, route tables) created with a VPC take up to 12 hours to be recorded
+
+#### How to disable indirect relationships
+Customers can disable indirect relationships **per account** via an AWS Support case:
+1. Open a **Technical** support case
+2. Service: **AWS Config**, Category: **Other**
+3. Subject: **Disable Indirect Relationship**
+4. Description: confirm you've read the FAQ, list regions, and account IDs
+5. For multiple accounts, attach a CSV with account IDs and regions
+6. Can be submitted from individual account or management account for bulk
+
+**Before disabling**, verify:
+- No Config rules depend on indirect relationships (e.g., `ec2-security-group-attached-to-eni`)
+- Firewall Manager Usage Audit policies are not in use
+- Acceptable to wait up to 12 hours for default resource recording
+
+**Reference**: [Indirect Relationships in AWS Config FAQ](https://docs.aws.amazon.com/config/latest/developerguide/faq.html#config-recording)
 
 ## Step 10: Present Optimization Report
 
@@ -249,11 +293,25 @@ Some older resource types generate extra CIs. Contact TAM to opt out if signific
 | Running from | Management / Config Delegated Admin / CT Delegated Admin |
 
 ### Recording Frequency Recommendations (from CloudTrail analysis)
+
+**Always use full AWS Config resource type names** (e.g., `AWS::EC2::Instance`, `AWS::EC2::SecurityGroup`, `AWS::S3::Bucket`) — never generic service names like "EC2" or "S3".
+
+#### Top CI Contributors by Account and Region
+| Account ID | Region | Resource Type | Monthly CIs | Monthly Cost | % of Total |
+|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | `AWS::EC2::SecurityGroup` | 15,000 | $45.00 | 25% |
+| 123456789012 | us-east-1 | `AWS::EC2::Instance` | 10,000 | $30.00 | 17% |
+| 234567890123 | eu-west-1 | `AWS::EC2::NetworkInterface` | 8,000 | $24.00 | 13% |
+| 123456789012 | us-east-1 | `AWS::Config::ResourceCompliance` | 7,000 | $21.00 | 12% |
+| 345678901234 | us-west-2 | `AWS::EC2::VPC` | 5,000 | $15.00 | 8% |
+
+#### Continuous vs Periodic Analysis per Resource Type
 | Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings | Dependencies to Check |
 |---|---|---|---|---|---|---|
-| ec2.amazonaws.com | 500 | 45 | 11.1× | ✅ Periodic | $33.30 | Firewall Manager |
-| s3.amazonaws.com | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 | None |
-| lambda.amazonaws.com | 200 | 50 | 4.0× | ⚠️ Borderline | $0.00 | None |
+| `AWS::EC2::SecurityGroup` | 500 | 45 | 11.1× | ✅ Periodic | $33.30 | Firewall Manager, indirect relationships |
+| `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 | None |
+| `AWS::Lambda::Function` | 200 | 50 | 4.0× | ⚠️ Borderline | $0.00 | None |
+| `AWS::IAM::Role` | 150 | 120 | 1.25× | ❌ Keep continuous | -$32.40 | Global resource — record in 1 region only |
 
 ### Other Recommendations (ranked by savings)
 | # | Recommendation | Est. Savings/mo | Risk | Requires Mgmt Account |
