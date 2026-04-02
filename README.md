@@ -154,3 +154,9 @@ power-aws-config-cost-estimator/
 ## License
 
 MIT
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history and updates.
+
+**To update**: In Kiro IDE, go to Powers panel → this power → **"Check for updates"**.
