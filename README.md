@@ -1,6 +1,6 @@
-# AWS Config Cost Estimator — Kiro Power
+# AWS Config Cost Estimator & Optimizer — Kiro Power
 
-Estimate AWS Config recorder costs **before enabling it** by analyzing CloudTrail organization trail write events against AWS Config's supported resource types.
+Estimate AWS Config recorder costs **before enabling it** and optimize **existing** Config deployments by analyzing CloudTrail organization trail data, service dependencies, duplicate rules, and recording frequency.
 
 ## How It Works
 
@@ -8,155 +8,159 @@ Estimate AWS Config recorder costs **before enabling it** by analyzing CloudTrai
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                          Kiro IDE / Power                                │
 │                                                                          │
-│  1. Activate power with keywords                                         │
-│     ("estimate config costs", "config pricing", etc.)                    │
+│  Two modes:                                                              │
 │                                                                          │
-│  2. Onboarding: Verify CloudTrail Organization Trail exists              │
+│  ┌─────────────────────────────┐  ┌────────────────────────────────────┐ │
+│  │  COST ESTIMATION            │  │  COST OPTIMIZATION                 │ │
+│  │  (Config not yet enabled)   │  │  (Config already running)          │ │
+│  │                             │  │                                    │ │
+│  │  1. Verify org trail        │  │  1. Analyze current Config spend   │ │
+│  │  2. Query CloudTrail        │  │  2. Identify top CI contributors   │ │
+│  │     (7 days default)        │  │  3. CloudTrail change frequency    │ │
+│  │  3. Map eventSource →       │  │     analysis per resource type     │ │
+│  │     Config resource types   │  │  4. Check service dependencies     │ │
+│  │  4. Continuous estimate:    │  │  5. Detect duplicate rules         │ │
+│  │     total events × $0.003   │  │  6. Apply 4× rule for periodic    │ │
+│  │  5. Periodic estimate:      │  │     vs continuous recommendation  │ │
+│  │     unique resources/day    │  │  7. Resource exclusion candidates  │ │
+│  │     × 30 × $0.012           │  │  8. Control Tower workaround      │ │
+│  └─────────────────────────────┘  │  9. Optimization report           │ │
+│                                    └────────────────────────────────────┘ │
 │                                                                          │
-│  3. Query CloudTrail Organization Trail                                  │
-│     ┌───────────────────────────────────┐                                │
-│     │  Filter:                          │                                │
-│     │   • readOnly = false              │                                │
-│     │   • managementEvent = true        │                                │
-│     └──────────────┬────────────────────┘                                │
-│                    │                                                     │
-│                    ▼                                                     │
-│  4. Map eventSource → AWS Config Supported Resource Types                │
-│     ┌───────────────────────────────────────────────────┐                │
-│     │ ec2.amazonaws.com        → EC2, EBS, VPC, ...     │                │
-│     │ s3.amazonaws.com         → S3 Buckets, ...        │                │
-│     │ lambda.amazonaws.com     → Lambda Functions        │                │
-│     │ iam.amazonaws.com        → IAM Users, Roles, ...  │                │
-│     │ rds.amazonaws.com        → RDS Instances, ...     │                │
-│     │ ... 130+ eventSource mappings                     │                │
-│     └──────────────┬────────────────────────────────────┘                │
-│                    │                                                     │
-│                    ▼                                                     │
-│  5. Two estimation modes                                                 │
-│                                                                          │
-│     ┌─────────────────────────┐    ┌──────────────────────────────────┐  │
-│     │  CONTINUOUS RECORDING   │    │  PERIODIC RECORDING              │  │
-│     │                         │    │                                  │  │
-│     │  Query: 7 days default  │    │  Query: 1 day (user picks day)  │  │
-│     │  Count: total events    │    │  Count: unique resource IDs     │  │
-│     │  Extrapolate: ×30/7     │    │  Project: ×7 weekly, ×30 monthly│  │
-│     │  Price: $0.003/CI       │    │  Price: $0.012/CI               │  │
-│     └─────────────────────────┘    └──────────────────────────────────┘  │
-│                                                                          │
-│  6. Output: Side-by-side cost tables + top cost drivers                  │
+│  Runs from: Management Account, Config Delegated Admin,                  │
+│             or CloudTrail Delegated Admin                                 │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Example Output
+## Cost Estimation — Example Output
 
-### Continuous Recording Estimate
-**Analysis period**: 7 days (2026-03-25 to 2026-03-31) | **Extrapolation**: ×4.29 (30 days ÷ 7 days queried — scales partial data to a full month)
+### Continuous Recording
+**Analysis period**: 7 days | **Extrapolation**: ×4.29 (30 ÷ 7 — scales partial data to a full month)
 
 | Account ID | Region | Event Source | Events (7d) | Est. Monthly CIs | Est. Monthly Cost |
 |---|---|---|---|---|---|
 | 123456789012 | us-east-1 | ec2.amazonaws.com | 1,200 | 5,143 | $15.43 |
 | 123456789012 | us-east-1 | s3.amazonaws.com | 350 | 1,500 | $4.50 |
-| 123456789012 | us-east-1 | iam.amazonaws.com | 200 | 857 | $2.57 |
-| **TOTAL** | | | **1,750** | **7,500** | **$22.50** |
+| **TOTAL** | | | **1,550** | **6,643** | **$19.93** |
 
-### Periodic Recording Estimate
-**Sample day**: 2026-03-31
+### Periodic Recording
+**Sample day**: 2026-03-31 (user-selected)
 
 > ⚠️ Weekly and monthly projections are based on a single day's data. Re-run on different days for higher accuracy.
 
-| Account ID | Region | Event Source | Unique Resources (1d) | Est. Weekly CIs | Est. Monthly CIs | Est. Weekly Cost | Est. Monthly Cost |
-|---|---|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | ec2.amazonaws.com | 45 | 315 | 1,350 | $3.78 | $16.20 |
-| 123456789012 | us-east-1 | s3.amazonaws.com | 20 | 140 | 600 | $1.68 | $7.20 |
-| 123456789012 | us-east-1 | iam.amazonaws.com | 12 | 84 | 360 | $1.01 | $4.32 |
-| **TOTAL** | | | **77** | **539** | **2,310** | **$6.47** | **$27.72** |
+| Account ID | Region | Event Source | Unique Resources (1d) | Est. Weekly CIs | Est. Monthly CIs | Est. Monthly Cost |
+|---|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | ec2.amazonaws.com | 45 | 315 | 1,350 | $16.20 |
+| 123456789012 | us-east-1 | s3.amazonaws.com | 20 | 140 | 600 | $7.20 |
+| **TOTAL** | | | **65** | **455** | **1,950** | **$23.40** |
 
-## Key Difference: Continuous vs Periodic
+## Cost Optimization — Example Output
 
-| | Continuous | Periodic |
-|---|---|---|
-| **What triggers a CI** | Every resource change | 1 per unique resource per day |
-| **Price per CI** | $0.003 | $0.012 |
-| **Best for** | Resources that rarely change | Resources that change frequently |
-| **Data source** | 7 days of events (configurable) | 1 day of unique resource IDs |
-| **Example**: EC2 instance modified 50×/day | 50 CIs = $0.15/day | 1 CI = $0.012/day |
+### The 4× Rule: Continuous vs Periodic per Resource Type
+Periodic is cheaper when a resource changes **more than 4× per day** ($0.012 / $0.003 = 4).
+
+| Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings |
+|---|---|---|---|---|---|
+| ec2.amazonaws.com | 500 | 45 | 11.1× | ✅ Switch to periodic | $33.30 |
+| s3.amazonaws.com | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 |
+| lambda.amazonaws.com | 200 | 50 | 4.0× | ⚠️ Borderline | $0.00 |
+
+### Dependency Impact Matrix
+| Recommendation | Security Hub | Control Tower | Firewall Mgr | Backup Audit Mgr | SSM Compliance |
+|---|---|---|---|---|---|
+| Exclude ResourceCompliance | ⚠️ Stale | ✅ OK | ✅ OK | ✅ OK | ⚠️ No history |
+| Switch EC2 to periodic | ✅ OK | ✅ OK | ❌ Breaks | ✅ OK | ⚠️ Delayed |
+| Exclude Backup types | ✅ OK | ✅ OK | ✅ OK | ❌ Breaks | ✅ OK |
+
+## Service Dependencies Checked
+
+| Service | Why It Matters |
+|---|---|
+| AWS Security Hub | Config rules power security checks |
+| AWS Control Tower | Blocks direct Config recorder changes — requires [workaround solution](https://github.com/aws-samples/aws-control-tower-config-customization) |
+| AWS Firewall Manager | Requires **continuous** recording — periodic breaks it |
+| AWS Backup Audit Manager | Requires Config resource tracking for compliance frameworks |
+| AWS Systems Manager Compliance | Uses Config for patch/association compliance history |
+| AWS Audit Manager | Captures Config evaluations as audit evidence |
+| AWS Trusted Advisor | Some checks powered by Config managed rules |
 
 ## Installation
 
-In Kiro IDE:
-1. Open the **Powers panel**
-2. Click **"Add power from GitHub"**
-3. Enter: `https://github.com/rodbren/power-aws-config-cost-estimator`
+In Kiro IDE → Powers panel → **"Add power from GitHub"** → enter:
+```
+https://github.com/rodbren/power-aws-config-cost-estimator
+```
 
 ## Prerequisites
 
 - **CloudTrail Organization Trail** with management events enabled
-- AWS credentials with `cloudtrail:LookupEvents` and `cloudtrail:DescribeTrails` permissions
+- AWS credentials with `cloudtrail:LookupEvents`, `cloudtrail:DescribeTrails`, `config:DescribeConfigRules` permissions
+- For optimization: access to management account or delegated admin account
 
 ## MCP Servers Included
 
 | Server | Purpose |
 |---|---|
-| `aws-documentation` | Search AWS docs for Config pricing and supported resource types |
-| `aws-core` | Execute AWS CLI commands to query CloudTrail data |
+| `aws-documentation` | Search AWS docs for Config pricing, supported resources, best practices |
+| `aws-core` | Execute AWS CLI commands to query CloudTrail and Config |
 | `aws-knowledge` | Retrieve AWS knowledge base content for guidance |
 
 ## Usage
 
-Activate the power by mentioning any of these keywords in a conversation:
-- "aws config", "config cost", "config estimator", "config pricing"
-- "configuration items", "config recorder", "cloudtrail"
+### Cost Estimation (Config not yet enabled)
+- "estimate my AWS Config costs"
+- "how much would it cost to enable Config recorder"
+- "forecast Config costs for 30 days"
 
-### Continuous: Adjustable Time Range
+### Cost Optimization (Config already running)
+- "optimize my AWS Config costs"
+- "find duplicate Config rules"
+- "which resource types should I switch to periodic"
+- "what can I safely exclude from Config recording"
+- "analyze Config cost drivers"
 
-| Command | Days | Accuracy |
+### Adjustable Parameters
+
+| Parameter | Default | Options |
 |---|---|---|
-| "quick estimate" | 7 (default) | Good |
-| "use 1 day" | 1 | Low — snapshot only |
-| "use 30 days" | 30 | High |
-| "use 90 days" | 90 | Highest (max CloudTrail LookupEvents supports) |
-
-### Periodic: Selectable Sample Day
-
-| Command | Behavior |
-|---|---|
-| (default) | Uses yesterday |
-| "use March 28" | Samples that specific day |
-| "use last Monday" | Samples a typical weekday |
-| "use last Saturday" | Samples a weekend day for comparison |
-
-## Caveats
-
-- **Approximation**: Not every CloudTrail write event creates a Config CI
-- **Missing types**: Some Config resource types (e.g., `AWS::Config::ResourceCompliance`) have no CloudTrail equivalent
-- **Periodic forecasting**: Weekly/monthly periodic projections are extrapolated from a single day — pick a representative day for best results
-- **CI recording only**: Config rules and conformance pack evaluations are billed separately
-- **Regional pricing**: Verify current pricing at [aws.amazon.com/config/pricing](https://aws.amazon.com/config/pricing/)
+| Estimation window | 7 days | 1–90 days |
+| Periodic sample day | Yesterday | Any specific day |
+| Optimization analysis | 7 days of CloudTrail | 1–90 days |
+| Account scope | Org-wide | Specific accounts |
 
 ## Project Structure
 
 ```
 power-aws-config-cost-estimator/
-├── POWER.md                          # Power metadata, onboarding, steering mapping
-├── mcp.json                          # MCP server configuration
-├── README.md                         # This file
+├── POWER.md                              # Metadata, onboarding, steering mapping
+├── mcp.json                              # MCP server configuration
+├── README.md                             # This file
+├── CHANGELOG.md                          # Version history
 └── steering/
-    └── estimate-workflow.md          # Full estimation workflow + eventSource mapping
+    ├── estimate-workflow.md              # Cost estimation workflow + 130+ eventSource mappings
+    └── optimization-workflow.md          # Cost optimization: dependencies, duplicates,
+                                          #   change frequency, exclusions, Control Tower
 ```
 
 ## References
 
 - [AWS Config Pricing](https://aws.amazon.com/config/pricing/)
 - [AWS Config Supported Resource Types](https://docs.aws.amazon.com/config/latest/developerguide/resource-config-reference.html)
-- [Estimating AWS Config Costs Using CloudTrail (AWS Blog)](https://aws.amazon.com/blogs/mt/estimating-aws-config-recorder-costs-and-usage-using-aws-cloudtrail/)
+- [AWS Config Cost Optimization Best Practices](https://aws-samples.github.io/cloud-operations-best-practices/docs/guides/AWS%20Config/AWS%20Config%20Cost%20Optimization/)
+- [Cost Optimization Recommendations for AWS Config](https://aws.amazon.com/blogs/mt/cost-optimization-recommendations-for-aws-config/)
+- [Discover Duplicate AWS Config Rules](https://aws.amazon.com/blogs/security/discover-duplicate-aws-config-rules-for-streamlined-compliance/)
+- [Customize AWS Config in Control Tower](https://aws.amazon.com/blogs/mt/customize-aws-config-resource-tracking-in-aws-control-tower-environment/)
+- [AWS Config Service Integrations](https://docs.aws.amazon.com/config/latest/developerguide/service-integrations.html)
+- [AWS Backup Audit Manager](https://docs.aws.amazon.com/aws-backup/latest/devguide/aws-backup-audit-manager.html)
+- [AWS Systems Manager Compliance](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-compliance.html)
 - [Kiro Powers Documentation](https://kiro.dev/docs/powers/create/)
-
-## License
-
-MIT
 
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and updates.
 
-**To update**: In Kiro IDE, go to Powers panel → this power → **"Check for updates"**.
+**To update**: Remove and re-add the power from the Kiro IDE Powers panel.
+
+## License
+
+MIT

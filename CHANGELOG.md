@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.0.0 (2026-04-02)
+- **NEW: Cost Optimization workflow** — analyze existing Config deployments for savings
+- **CloudTrail change frequency analysis**: Query org trail per resource type, calculate daily change ratio, apply 4× rule for continuous-vs-periodic recommendations with actual dollar savings
+- **Service dependency matrix**: Security Hub, Control Tower, Firewall Manager, Backup Audit Manager, SSM Compliance, Audit Manager, Trusted Advisor — checked before every recommendation
+- **Duplicate rule detection**: Identify overlapping rules from conformance packs, Security Hub, Control Tower
+- **Control Tower workaround**: Reference to aws-control-tower-config-customization solution with deployment parameters
+- **ResourceCompliance stale risk**: Document impact of excluding ResourceCompliance on detective rules, with CloudTrail query mitigation
+- **Delegated admin support**: Can run from management account, Config delegated admin, or CloudTrail delegated admin with capability matrix
+- **Resource exclusion guidance**: Safe vs risky exclusions with pre-exclusion checklist
+- Power renamed to "AWS Config Cost Estimator & Optimizer"
+- Added optimization-related keywords for activation
+
 ## v1.1.0 (2026-04-02)
 - **Periodic recording**: Now counts unique resource IDs (not total events) for accurate per-resource-per-day estimation
 - **Periodic forecasting**: Daily → weekly (×7) → monthly (×30) projections
