@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.1.0 (2026-04-02)
+- **Account/region breakdown**: Optimization report now shows top CI contributors per account and region with % of total spend
+- **Full AWS:: resource type names**: All outputs use `AWS::EC2::Instance`, `AWS::S3::Bucket`, etc. instead of generic service names
+- **Indirect relationships**: Full table of all 10 indirect relationship pairs, extra CIs generated, dependent services, and step-by-step AWS Support case process to disable per account
+- **Support case guidance**: How to disable indirect relationships via Technical support case (individual or bulk from management account with CSV)
+
 ## v2.0.0 (2026-04-02)
 - **NEW: Cost Optimization workflow** — analyze existing Config deployments for savings
 - **CloudTrail change frequency analysis**: Query org trail per resource type, calculate daily change ratio, apply 4× rule for continuous-vs-periodic recommendations with actual dollar savings

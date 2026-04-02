@@ -61,9 +61,27 @@ Periodic is cheaper when a resource changes **more than 4× per day** ($0.012 / 
 
 | Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings |
 |---|---|---|---|---|---|
-| ec2.amazonaws.com | 500 | 45 | 11.1× | ✅ Switch to periodic | $33.30 |
-| s3.amazonaws.com | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 |
-| lambda.amazonaws.com | 200 | 50 | 4.0× | ⚠️ Borderline | $0.00 |
+| `AWS::EC2::SecurityGroup` | 500 | 45 | 11.1× | ✅ Switch to periodic | $33.30 |
+| `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 |
+| `AWS::Lambda::Function` | 200 | 50 | 4.0× | ⚠️ Borderline | $0.00 |
+
+### Top CI Contributors by Account and Region
+| Account ID | Region | Resource Type | Monthly CIs | Monthly Cost | % of Total |
+|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | `AWS::EC2::SecurityGroup` | 15,000 | $45.00 | 25% |
+| 123456789012 | us-east-1 | `AWS::EC2::Instance` | 10,000 | $30.00 | 17% |
+| 234567890123 | eu-west-1 | `AWS::EC2::NetworkInterface` | 8,000 | $24.00 | 13% |
+
+### Indirect Relationships — Hidden CI Multiplier
+Changes to some EC2/VPC resources generate **extra CIs** for related resources:
+
+| Change to | Generates extra CIs for |
+|---|---|
+| `AWS::EC2::Instance` | `AWS::EC2::SecurityGroup`, `AWS::EC2::Subnet`, `AWS::EC2::VPC` |
+| `AWS::EC2::SecurityGroup` | `AWS::EC2::VPC` |
+| `AWS::EC2::RouteTable` | `AWS::EC2::Instance`, `AWS::EC2::NetworkInterface`, `AWS::EC2::Subnet`, `AWS::EC2::VPNGateway`, `AWS::EC2::VPC` |
+
+Customers can disable indirect relationships **per account** via [AWS Support case](https://docs.aws.amazon.com/config/latest/developerguide/faq.html#config-recording).
 
 ### Dependency Impact Matrix
 | Recommendation | Security Hub | Control Tower | Firewall Mgr | Backup Audit Mgr | SSM Compliance |
@@ -83,6 +101,7 @@ Periodic is cheaper when a resource changes **more than 4× per day** ($0.012 / 
 | AWS Systems Manager Compliance | Uses Config for patch/association compliance history |
 | AWS Audit Manager | Captures Config evaluations as audit evidence |
 | AWS Trusted Advisor | Some checks powered by Config managed rules |
+| Indirect Relationships | EC2/VPC resources generate extra CIs — can be disabled per account via [Support case](https://docs.aws.amazon.com/config/latest/developerguide/faq.html#config-recording) |
 
 ## Installation
 
