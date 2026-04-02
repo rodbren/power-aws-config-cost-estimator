@@ -31,34 +31,43 @@ Use Cost Explorer to understand current Config spend:
 
 **From delegated admin**: May need billing access or CUR data. Alternatively, use CloudWatch `ConfigurationItemsRecorded` metrics per account.
 
-## Step 2: Identify Top CI Contributors
+## Step 2: Identify Top CI Contributors (from Config data — NOT CloudTrail)
 
-### Via CloudWatch Metrics
-Query the `ConfigurationItemsRecorded` metric in CloudWatch, grouped by `ResourceType`, to find which resource types generate the most CIs.
+**Start from AWS Config data, NOT CloudTrail.** CloudTrail is only used later for deep-dive on top contributors.
 
-### Via Config Aggregator (from delegated admin)
-Use the Config aggregator to query resource counts and compliance across all accounts.
+### 2a: Check for Existing Config Aggregators
+First, list all available Config aggregators:
+- Run `aws configservice describe-configuration-aggregators`
+- Present the list to the user and **ask which aggregator to use**
+- If no aggregators exist, fall back to CloudWatch metrics in the current account/region
 
-### Via CloudTrail (per resource ID)
-For each top-contributing resource type, query CloudTrail for non-read-only events to see **which specific resource IDs** generate the most changes:
-- Extract `resources[].ARN` or resource identifiers from `requestParameters`
-- Count events per unique resource ID
-- Rank by frequency
+### 2b: Pull Top Contributors from the Selected Aggregator
+Using the customer's chosen aggregator:
+- Query `get-aggregate-discovered-resource-counts` grouped by `RESOURCE_TYPE` to see which resource types have the most resources
+- Query CloudWatch metric `ConfigurationItemsRecorded` with dimension `ResourceType` for the last 7 days to see which types generate the most CIs
+- Combine both views: high resource count + high CI count = top cost drivers
 
-## Step 3: Per-Resource-Type Change Frequency Analysis (CloudTrail)
+### 2c: If No Aggregator Available
+Fall back to:
+- CloudWatch `ConfigurationItemsRecorded` metric in the current account/region
+- Cost Explorer filtered by Service = "AWS Config", grouped by Usage Type and Linked Account
 
-**This is required to generate continuous-vs-periodic recommendations.** You must query the organization trail to get actual daily change counts per resource type.
+### Output: Top 10 Contributors
+Rank resource types by CI count. Take the **top 10 resource types** to analyze further with CloudTrail in Step 3.
+
+## Step 3: Deep-Dive Top 10 Contributors via CloudTrail (org trail)
+
+**Only query CloudTrail for the top 10 CI-contributing resource types identified in Step 2.** Do NOT scan all 130+ eventSources — that's slow and unnecessary.
 
 **Requires access to the organization trail** — run from management account or CloudTrail delegated admin account.
 
-### How to analyze
-For each top CI-contributing resource type identified in Step 2:
-
-1. Query the organization trail for **7 days** of non-read-only events for that resource type's eventSource
-2. Group by **day** and count:
+### For each of the top 10 contributors:
+1. Map the Config resource type to its CloudTrail `eventSource` (e.g., `AWS::EC2::SecurityGroup` → `ec2.amazonaws.com`)
+2. Query the organization trail for **7 days** of non-read-only events for that eventSource
+3. Group by **day** and count:
    - **Total events per day** (= continuous CIs per day)
    - **Unique resource IDs per day** (= periodic CIs per day)
-3. Calculate the **average daily change ratio**:
+4. Calculate the **average daily change ratio**:
 ```
 change_ratio = avg_total_events_per_day / avg_unique_resources_per_day
 ```
