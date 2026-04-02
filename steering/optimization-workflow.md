@@ -1,5 +1,10 @@
 # AWS Config Cost Optimization Workflow
 
+## ⚠️ CRITICAL EXECUTION ORDER — DO NOT SKIP
+1. **FIRST**: Check Config aggregators → ask user to pick one → pull top 10 resource types from Config data
+2. **THEN**: Only after identifying top 10 from Config, go to CloudTrail for deep-dive on those 10 only
+3. **NEVER** start with CloudTrail. CloudTrail is slow and should only be used for targeted analysis of top contributors already identified from Config data.
+
 ## Overview
 This workflow analyzes an **existing** AWS Config deployment to identify cost optimization opportunities. It correlates Config recorder data, rule evaluations, CloudTrail events, and service dependencies to provide actionable recommendations.
 
