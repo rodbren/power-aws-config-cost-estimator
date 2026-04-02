@@ -296,7 +296,9 @@ Customers can disable indirect relationships **per account** via an AWS Support 
 
 **Always use full AWS Config resource type names** (e.g., `AWS::EC2::Instance`, `AWS::EC2::SecurityGroup`, `AWS::S3::Bucket`) — never generic service names like "EC2" or "S3".
 
-#### Top CI Contributors by Account and Region
+#### MANDATORY: Top CI Contributors by Account and Region
+**Every report MUST include this table.** Extract `recipientAccountId` and `awsRegion` from each CloudTrail event and group by account + region + resource type. Customers need to know exactly which accounts and regions drive costs.
+
 | Account ID | Region | Resource Type | Monthly CIs | Monthly Cost | % of Total |
 |---|---|---|---|---|---|
 | 123456789012 | us-east-1 | `AWS::EC2::SecurityGroup` | 15,000 | $45.00 | 25% |
@@ -304,6 +306,16 @@ Customers can disable indirect relationships **per account** via an AWS Support 
 | 234567890123 | eu-west-1 | `AWS::EC2::NetworkInterface` | 8,000 | $24.00 | 13% |
 | 123456789012 | us-east-1 | `AWS::Config::ResourceCompliance` | 7,000 | $21.00 | 12% |
 | 345678901234 | us-west-2 | `AWS::EC2::VPC` | 5,000 | $15.00 | 8% |
+
+#### MANDATORY: Per-Resource-ID Detail for Periodic Candidates
+For every resource type recommended for periodic recording, **list the individual resource IDs** and their daily change count. This shows the customer exactly which resources are high-churn and validates the periodic recommendation.
+
+| Account ID | Region | Resource Type | Resource ID | Avg Changes/Day | Periodic Saves? |
+|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | `AWS::EC2::SecurityGroup` | sg-0a1b2c3d4e5f | 45 | ✅ Yes (45× > 4×) |
+| 123456789012 | us-east-1 | `AWS::EC2::SecurityGroup` | sg-1f2e3d4c5b6a | 12 | ✅ Yes (12× > 4×) |
+| 123456789012 | us-east-1 | `AWS::EC2::Instance` | i-0abc123def456 | 80 | ✅ Yes (80× > 4×) |
+| 234567890123 | eu-west-1 | `AWS::EC2::Instance` | i-9zyx876wvu543 | 2 | ❌ No (2× < 4×) |
 
 #### Continuous vs Periodic Analysis per Resource Type
 | Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings | Dependencies to Check |
