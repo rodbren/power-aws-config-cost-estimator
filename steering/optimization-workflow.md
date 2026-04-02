@@ -40,25 +40,27 @@ Use Cost Explorer to understand current Config spend:
 
 **Start from AWS Config data, NOT CloudTrail.** CloudTrail is only used later for deep-dive on top contributors.
 
-### 2a: Check for Existing Config Aggregators
-First, list all available Config aggregators:
-- Run `aws configservice describe-configuration-aggregators`
-- Present the list to the user and **ask which aggregator to use**
-- If no aggregators exist, fall back to CloudWatch metrics in the current account/region
+### 2a: List Config Aggregators and Ask User to Choose
+1. Run `aws configservice describe-configuration-aggregators`
+2. Present the full list of aggregator names to the user
+3. **STOP and WAIT for user input** — ask: "Which aggregator would you like me to use?"
+4. **Do NOT proceed until the user selects one.** Do NOT auto-select. Do NOT fall through to CloudTrail.
+5. If no aggregators exist, tell the user and ask if they want to use CloudWatch metrics instead. **WAIT for confirmation.**
 
-### 2b: Pull Top Contributors from the Selected Aggregator
-Using the customer's chosen aggregator:
-- Query `get-aggregate-discovered-resource-counts` grouped by `RESOURCE_TYPE` to see which resource types have the most resources
-- Query CloudWatch metric `ConfigurationItemsRecorded` with dimension `ResourceType` for the last 7 days to see which types generate the most CIs
-- Combine both views: high resource count + high CI count = top cost drivers
+### 2b: Query the User-Selected Aggregator
+1. Run `aws configservice get-aggregate-discovered-resource-counts --configuration-aggregator-name <USER_SELECTED_NAME> --group-by-key RESOURCE_TYPE`
+2. If it returns **0 resource types**: tell the user this aggregator has no data (may be authorization-only or permissions issue). Ask if they want to try another aggregator or fall back to CloudWatch metrics. **WAIT for user input.**
+3. If it returns data: take the **top 10 resource types by count**
 
-### 2c: If No Aggregator Available
-Fall back to:
-- CloudWatch `ConfigurationItemsRecorded` metric in the current account/region
-- Cost Explorer filtered by Service = "AWS Config", grouped by Usage Type and Linked Account
+### 2c: Fallback — CloudWatch Metrics (only if user agrees)
+**Only use this if the user confirms** after aggregators returned no data.
+- Query CloudWatch metric `ConfigurationItemsRecorded` with dimension `ResourceType` for the last 7 days
+- Take the **top 10 resource types by CI count**
 
-### Output: Top 10 Contributors
-Rank resource types by CI count. Take the **top 10 resource types** to analyze further with CloudTrail in Step 3.
+### 2d: Confirm Top 10 Before Proceeding
+**Present the top 10 resource types to the user.**
+**STOP and WAIT for confirmation before moving to Step 3.**
+Do NOT proceed to CloudTrail until the user has seen and approved the top 10 list.
 
 ## Step 3: Deep-Dive Top 10 Contributors via CloudTrail (org trail)
 
