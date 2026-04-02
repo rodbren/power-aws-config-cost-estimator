@@ -50,7 +50,7 @@ Estimate AWS Config recorder costs **before enabling it** by analyzing CloudTrai
 ## Example Output
 
 ### Continuous Recording Estimate
-**Analysis period**: 7 days (2026-03-25 to 2026-03-31) | **Extrapolation**: ×4.29
+**Analysis period**: 7 days (2026-03-25 to 2026-03-31) | **Extrapolation**: ×4.29 (30 days ÷ 7 days queried — scales partial data to a full month)
 
 | Account ID | Region | Event Source | Events (7d) | Est. Monthly CIs | Est. Monthly Cost |
 |---|---|---|---|---|---|
