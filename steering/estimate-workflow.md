@@ -193,12 +193,27 @@ The following CloudTrail `eventSource` values map to AWS Config supported resour
 
 ## Step 4: Aggregate and Count Events
 
+### For Continuous Recording Estimate
 Group the non-read-only events by:
 1. **Account ID** (`recipientAccountId`)
 2. **Region** (`awsRegion`)
 3. **Event Source** (`eventSource`)
 
-The count per group represents the **estimated number of configuration items** that AWS Config would record.
+The **total event count** per group represents the estimated number of CIs (every change = 1 CI).
+
+### For Periodic Recording Estimate
+Periodic recording charges **1 CI per unique resource per day**, regardless of how many times that resource changed. To estimate this:
+
+1. Query **1 day** of CloudTrail data (not the full 7-day window)
+2. Extract the **resource ID** from each event. CloudTrail events contain resource identifiers in:
+   - `resources[].ARN` — the primary source for resource IDs
+   - `requestParameters` — contains resource-specific identifiers (e.g., `instanceId`, `bucketName`, `functionName`)
+   - `responseElements` — for create events where the resource ID is returned
+3. Count **distinct resource IDs per eventSource per account per region** for that single day
+4. That count = the number of CIs Config would record per day under periodic recording
+5. Multiply by **30** for the monthly estimate
+
+**Important**: The periodic estimate must be based on **unique resource IDs**, not total events. A single EC2 instance modified 50 times in a day = 1 CI under periodic, but 50 CIs under continuous.
 
 ## Step 5: Calculate Estimated Cost
 
@@ -222,28 +237,42 @@ Use the following AWS Config pricing tiers (US East - N. Virginia, public region
 
 ### Cost Formula
 ```
+--- CONTINUOUS ---
 Extrapolation Factor = 30 / days_queried  (default: 30 / 7 = ~4.29)
+Estimated Monthly CIs = TotalEvents_in_period × Extrapolation Factor
+Estimated Monthly Cost = Estimated Monthly CIs × $0.003
 
-Estimated Monthly CIs = TotalCIs_in_period × Extrapolation Factor
-
-Estimated Monthly CI Cost (Continuous) = Estimated Monthly CIs × $0.003
-Estimated Monthly CI Cost (Periodic)   = UniqueResources × 30 × $0.012
+--- PERIODIC ---
+(Use 1 day of data only)
+Unique Resources Per Day = COUNT(DISTINCT resource_id) per eventSource/account/region
+Estimated Monthly CIs = Unique Resources Per Day × 30
+Estimated Monthly Cost = Estimated Monthly CIs × $0.012
 ```
 
 **Always present both continuous and periodic estimates** so the customer can compare.
-**Always show the extrapolation factor and days queried.**
+**Always show the extrapolation factor, days queried, and for periodic: the single day used and unique resource count.**
 
 ## Step 6: Present Results
 
-Format the output as a table showing:
+Format the output as two tables:
 
+### Continuous Recording Estimate
 **Analysis period**: X days (YYYY-MM-DD to YYYY-MM-DD) | **Extrapolation factor**: 30/X = Y.YY
 
-| Account ID | Region | Event Source | CIs (period) | Est. Monthly CIs | Est. Cost (Continuous) | Est. Cost (Periodic) |
-|---|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | ec2.amazonaws.com | 1,163 | 4,984 | $14.95 | — |
-| ... | ... | ... | ... | ... | ... | ... |
-| **TOTAL** | | | **X** | **Y** | **$A.AA** | **$B.BB** |
+| Account ID | Region | Event Source | Events (period) | Est. Monthly CIs | Est. Monthly Cost |
+|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | ec2.amazonaws.com | 1,163 | 4,984 | $14.95 |
+| ... | ... | ... | ... | ... | ... |
+| **TOTAL** | | | **X** | **Y** | **$A.AA** |
+
+### Periodic Recording Estimate
+**Sample day**: YYYY-MM-DD | **Unique resources counted per day, × 30 for monthly**
+
+| Account ID | Region | Event Source | Unique Resources (1 day) | Est. Monthly CIs | Est. Monthly Cost |
+|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | ec2.amazonaws.com | 45 | 1,350 | $16.20 |
+| ... | ... | ... | ... | ... | ... |
+| **TOTAL** | | | **X** | **Y** | **$B.BB** |
 
 Then provide:
 1. **Total estimated monthly cost** for continuous recording
@@ -258,6 +287,6 @@ Then provide:
 3. **CloudTrail LookupEvents limitation**: Only returns the last 90 days of management events and has API rate limits. For larger analysis, recommend CloudTrail Lake or Athena.
 4. **Config rules and conformance packs**: This estimate covers CI recording costs only. Config rules and conformance pack evaluations are billed separately.
 5. **Regional pricing**: Pricing may vary by region. Always verify at https://aws.amazon.com/config/pricing/
-6. **Periodic vs continuous**: Periodic recording generates 1 CI per resource per day (cheaper for resources that change frequently). Continuous recording generates 1 CI per change (cheaper for resources that rarely change).
+6. **Periodic vs continuous**: Periodic recording generates 1 CI per **unique resource** per day — a resource modified 100 times = 1 CI. Continuous recording generates 1 CI per change — 100 modifications = 100 CIs. Periodic is cheaper for frequently-changing resources; continuous is cheaper for rarely-changing resources.
 7. **Organization-wide**: If using an organization trail, results include all member accounts. Per-account breakdowns help identify which accounts drive the most cost.
 8. **Use the AWS Pricing Calculator** for official estimates: https://calculator.aws/#/createCalculator/Config
