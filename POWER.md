@@ -1,8 +1,8 @@
 ---
 name: "aws-config-cost-estimator"
-displayName: "AWS Config Cost Estimator"
-description: "Estimate AWS Config recorder costs by analyzing CloudTrail organization trail write events against Config-supported resource types to forecast configuration item counts and monthly costs"
-keywords: ["aws config", "config cost", "configuration items", "cloudtrail", "organization trail", "config estimator", "config pricing", "config recorder", "cost estimate", "config forecast"]
+displayName: "AWS Config Cost Estimator & Optimizer"
+description: "Estimate AWS Config recorder costs using CloudTrail organization trail data AND optimize existing Config deployments by analyzing top CI contributors, duplicate rules, recording frequency, resource exclusions, and service dependencies"
+keywords: ["aws config", "config cost", "configuration items", "cloudtrail", "organization trail", "config estimator", "config pricing", "config recorder", "cost estimate", "config forecast", "config optimization", "config rules", "conformance pack", "duplicate rules", "periodic recording", "resource exclusion", "control tower config"]
 ---
 
 # Onboarding
@@ -28,3 +28,4 @@ This power uses the following MCP servers:
 
 # When to Load Steering Files
 - Running a Config cost estimate, querying CloudTrail, or analyzing events → `estimate-workflow.md`
+- Optimizing existing Config deployment, analyzing top contributors, duplicate rules, recording frequency, resource exclusions, or service dependencies → `optimization-workflow.md`
