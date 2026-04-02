@@ -62,50 +62,66 @@ Use Cost Explorer to understand current Config spend:
 **STOP and WAIT for confirmation before moving to Step 3.**
 Do NOT proceed to CloudTrail until the user has seen and approved the top 10 list.
 
-## Step 3: Deep-Dive Top 10 Contributors via CloudTrail (org trail)
+## Step 3: Deep-Dive ALL Top 10 Contributors via CloudTrail (org trail)
 
-**Only query CloudTrail for the top 10 CI-contributing resource types identified in Step 2.** Do NOT scan all 130+ eventSources — that's slow and unnecessary.
+**Query CloudTrail for ALL top 10 resource types from Step 2 — do not skip any.**
 
 **Requires access to the organization trail** — run from management account or CloudTrail delegated admin account.
 
-### For each of the top 10 contributors:
+### For EACH of the top 10 contributors (no exceptions):
 1. Map the Config resource type to its CloudTrail `eventSource` (e.g., `AWS::EC2::SecurityGroup` → `ec2.amazonaws.com`)
-2. Query the organization trail for **7 days** of non-read-only events for that eventSource
-3. Group by **day** and count:
+2. **IMPORTANT**: When an eventSource like `ec2.amazonaws.com` covers multiple Config resource types, break down by **specific `AWS::` resource type** — use `resources[].type` or map from `eventName` (e.g., `CreateNetworkInterfacePermission` → `AWS::EC2::NetworkInterface`, `ModifySubnetAttribute` → `AWS::EC2::Subnet`). **Never report just the eventSource name.**
+3. Query the organization trail for **7 days** of non-read-only events
+4. Group by:
+   - **Account ID** (`recipientAccountId`) — MANDATORY
+   - **Region** (`awsRegion`) — MANDATORY
+   - **Specific `AWS::` resource type** — MANDATORY
+   - **Individual resource ID** — MANDATORY for periodic candidates
+   - **Day** for daily counts
+5. Count per group:
    - **Total events per day** (= continuous CIs per day)
    - **Unique resource IDs per day** (= periodic CIs per day)
-4. Calculate the **average daily change ratio**:
+6. Calculate the **average daily change ratio**:
 ```
 change_ratio = avg_total_events_per_day / avg_unique_resources_per_day
 ```
-4. Apply the **4× rule**:
-   - If `change_ratio > 4` → **recommend periodic** (saves money because each resource changes >4×/day, and periodic only charges once per resource per day)
-   - If `change_ratio ≤ 4` → **recommend staying continuous** (fewer total CIs than periodic's flat per-resource-per-day charge)
-   - If `change_ratio` is close to 4 (between 3–5) → **flag as borderline**, recommend monitoring before switching
+7. Apply the **4× rule**:
+   - `change_ratio > 4` → **recommend periodic**
+   - `change_ratio ≤ 4` → **recommend staying continuous**
+   - `change_ratio` between 3–5 → **flag as borderline**
 
-5. Calculate the actual savings:
+8. Calculate savings:
 ```
 current_continuous_cost = avg_total_events_per_day × 30 × $0.003
 proposed_periodic_cost  = avg_unique_resources_per_day × 30 × $0.012
 monthly_savings         = current_continuous_cost - proposed_periodic_cost
 ```
 
-### Example analysis output per resource type
+### Output format — ALL columns MANDATORY
 
-**Always use full `AWS::Service::ResourceType` names**, not generic service names.
+#### Summary table (by specific AWS:: resource type, per account/region)
+| Account ID | Region | Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings |
+|---|---|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | 217 | 2 | 108.5× | ✅ Periodic | $18.78 |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | 162 | 5 | 32.4× | ✅ Periodic | $12.78 |
+| 123456789012 | us-east-1 | `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Continuous | -$3.60 |
 
-| Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings |
-|---|---|---|---|---|---|
-| `AWS::EC2::SecurityGroup` | 500 | 45 | 11.1× | ✅ Switch to periodic | $33.30 |
-| `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 (periodic costs more) |
-| `AWS::Lambda::Function` | 200 | 50 | 4.0× | ⚠️ Borderline | $0.00 (break-even) |
-| `AWS::IAM::Role` | 150 | 120 | 1.25× | ❌ Keep continuous | -$32.40 (periodic costs more) |
+#### MANDATORY: Per-Resource-ID Analysis for ALL Periodic Candidates
+**For every resource type recommended for periodic, list EACH individual resource ID with its own change frequency.** This is critical — the 4× rule must be validated per resource, not just per type. Some individual resources may be low-churn even if the type average is high.
+
+| Account ID | Region | Resource Type | Resource ID | Changes/Day | Change Ratio | Periodic Saves? |
+|---|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-06e0134b | 108 | 108× | ✅ Yes |
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-007336a4 | 108 | 108× | ✅ Yes |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-0abc123 | 50 | 50× | ✅ Yes |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-9xyz456 | 2 | 2× | ❌ No — this resource is low-churn |
+
+**If any individual resource within a periodic-recommended type has a ratio ≤ 4**, flag it — switching the whole type to periodic still saves overall, but note that this specific resource would be cheaper under continuous.
 
 ### Important: Query the right days
 - Query **at least 7 days** for a representative sample
 - Include both weekdays and weekends
-- Avoid maintenance windows or deployment days that skew results
-- Let the customer choose the analysis period if they want more/fewer days
+- Let the customer choose the analysis period
 
 ## Step 4: Evaluate Service Dependencies
 
