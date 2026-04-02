@@ -94,7 +94,7 @@ Customers can disable indirect relationships **per account** via [AWS Support ca
 
 | Service | Why It Matters |
 |---|---|
-| AWS Security Hub | Config rules power security checks |
+| AWS Security Hub CSPM | Config rules power security checks |
 | AWS Control Tower | Blocks direct Config recorder changes — requires [workaround solution](https://github.com/aws-samples/aws-control-tower-config-customization) |
 | AWS Firewall Manager | Requires **continuous** recording — periodic breaks it |
 | AWS Backup Audit Manager | Requires Config resource tracking for compliance frameworks |

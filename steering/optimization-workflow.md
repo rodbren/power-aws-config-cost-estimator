@@ -97,7 +97,7 @@ monthly_savings         = current_continuous_cost - proposed_periodic_cost
 
 | Dependent Service | Config Requirement | Impact of Excluding Resources or Switching to Periodic |
 |---|---|---|
-| **AWS Security Hub** | Requires Config rules for security checks. Many are change-triggered. | Excluding resource types breaks Security Hub controls that evaluate those types |
+| **AWS Security Hub CSPM** | Requires Config rules for security checks. Many are change-triggered. | Excluding resource types breaks Security Hub controls that evaluate those types |
 | **AWS Control Tower** | Enables Config on all enrolled accounts. **Blocks direct changes to Config recorder.** | Cannot modify Config recorder directly — causes Landing Zone drift. Must use the [Config Customization solution](https://github.com/aws-samples/aws-control-tower-config-customization) deployed in the management account |
 | **AWS Firewall Manager** | Requires **continuous recording** | Switching to periodic **will break** Firewall Manager |
 | **AWS Backup Audit Manager** | Requires Config resource tracking to evaluate backup compliance frameworks and generate audit reports | Excluding Backup resource types (`AWS::Backup::*`) breaks compliance frameworks and audit reports |
@@ -173,7 +173,7 @@ WHERE eventName='PutEvaluations'
 
 Duplicate Config rules are a common cost driver from multiple sources:
 - AWS Config conformance packs
-- AWS Security Hub standards
+- AWS Security Hub CSPM standards
 - AWS Control Tower controls
 - Individually created rules
 
