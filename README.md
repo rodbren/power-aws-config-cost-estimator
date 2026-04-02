@@ -15,16 +15,16 @@ Estimate AWS Config recorder costs **before enabling it** and optimize **existin
 │  │  (Config not yet enabled)   │  │  (Config already running)          │ │
 │  │                             │  │                                    │ │
 │  │  1. Verify org trail        │  │  1. Analyze current Config spend   │ │
-│  │  2. Query CloudTrail        │  │  2. Identify top CI contributors   │ │
-│  │     (7 days default)        │  │  3. CloudTrail change frequency    │ │
-│  │  3. Map eventSource →       │  │     analysis per resource type     │ │
-│  │     Config resource types   │  │  4. Check service dependencies     │ │
-│  │  4. Continuous estimate:    │  │  5. Detect duplicate rules         │ │
-│  │     total events × $0.003   │  │  6. Apply 4× rule for periodic    │ │
-│  │  5. Periodic estimate:      │  │     vs continuous recommendation  │ │
-│  │     unique resources/day    │  │  7. Resource exclusion candidates  │ │
-│  │     × 30 × $0.012           │  │  8. Control Tower workaround      │ │
-│  └─────────────────────────────┘  │  9. Optimization report           │ │
+│  │  2. Query CloudTrail        │  │  2. List Config aggregators →      │ │
+│  │     (7 days default)        │  │     user picks one                 │ │
+│  │  3. Map eventSource →       │  │  3. Pull top 10 resource types     │ │
+│  │     Config resource types   │  │     from aggregator + CloudWatch   │ │
+│  │  4. Continuous estimate:    │  │  4. CloudTrail deep-dive on top 10 │ │
+│  │     total events × $0.003   │  │     only (not all 130+)            │ │
+│  │  5. Periodic estimate:      │  │  5. Per-resource-ID change freq    │ │
+│  │     unique resources/day    │  │  6. 4× rule for periodic recs      │ │
+│  │     × 30 × $0.012           │  │  7. Dependencies + exclusions      │ │
+│  └─────────────────────────────┘  │  8. Control Tower workaround       │ │
 │                                    └────────────────────────────────────┘ │
 │                                                                          │
 │  Runs from: Management Account, Config Delegated Admin,                  │

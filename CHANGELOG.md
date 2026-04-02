@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.2.0 (2026-04-02)
+- **Optimization starts from Config data, not CloudTrail**: Lists existing Config aggregators, asks user to pick one, pulls top contributors from there
+- **Top 10 resource types**: Only the top 10 CI-contributing resource types get CloudTrail deep-dive (not all 130+)
+- **Per-resource-ID detail for periodic candidates**: Shows individual resource IDs with daily change counts
+- **Account/region breakdown mandatory**: Every report must show per-account, per-region cost breakdown with % of total
+- **Security Hub CSPM**: Renamed service references for clarity
+
 ## v2.1.1 (2026-04-02)
 - Renamed service references from "AWS Security Hub" to "AWS Security Hub CSPM" for clarity per official naming
 - Config rule prefixes (`securityhub-*`) unchanged — only service name references updated
