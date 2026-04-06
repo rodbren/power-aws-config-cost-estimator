@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.3.0 (2026-04-02)
+- **Config-first workflow enforced**: Critical execution order at top — Config aggregators first, CloudTrail second, never skip
+- **Aggregator selection**: Lists all aggregators, STOPS and WAITS for user to pick one before proceeding
+- **All top 10 analyzed**: Every resource type from the top 10 gets CloudTrail deep-dive, no skipping
+- **Specific AWS:: resource types**: eventSource mapped to actual types (e.g., `ec2.amazonaws.com` → `AWS::EC2::Subnet`, `AWS::EC2::NetworkInterface`)
+- **Per-resource-ID analysis mandatory**: Every periodic candidate lists individual resource IDs with their own change ratio, flags low-churn resources within high-churn types
+- **Account/region mandatory in all tables**: Every row includes Account ID and Region
+
 ## v2.2.0 (2026-04-02)
 - **Optimization starts from Config data, not CloudTrail**: Lists existing Config aggregators, asks user to pick one, pulls top contributors from there
 - **Top 10 resource types**: Only the top 10 CI-contributing resource types get CloudTrail deep-dive (not all 130+)

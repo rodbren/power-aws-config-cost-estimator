@@ -16,13 +16,13 @@ Estimate AWS Config recorder costs **before enabling it** and optimize **existin
 │  │                             │  │                                    │ │
 │  │  1. Verify org trail        │  │  1. Analyze current Config spend   │ │
 │  │  2. Query CloudTrail        │  │  2. List Config aggregators →      │ │
-│  │     (7 days default)        │  │     user picks one                 │ │
-│  │  3. Map eventSource →       │  │  3. Pull top 10 resource types     │ │
-│  │     Config resource types   │  │     from aggregator + CloudWatch   │ │
-│  │  4. Continuous estimate:    │  │  4. CloudTrail deep-dive on top 10 │ │
-│  │     total events × $0.003   │  │     only (not all 130+)            │ │
+│  │     (7 days default)        │  │     user picks one (WAIT)          │ │
+│  │  3. Map eventSource →       │  │  3. Top 10 resource types from     │ │
+│  │     Config resource types   │  │     aggregator (confirm with user) │ │
+│  │  4. Continuous estimate:    │  │  4. CloudTrail deep-dive ALL top   │ │
+│  │     total events × $0.003   │  │     10 → specific AWS:: types      │ │
 │  │  5. Periodic estimate:      │  │  5. Per-resource-ID change freq    │ │
-│  │     unique resources/day    │  │  6. 4× rule for periodic recs      │ │
+│  │     unique resources/day    │  │  6. 4× rule per resource ID        │ │
 │  │     × 30 × $0.012           │  │  7. Dependencies + exclusions      │ │
 │  └─────────────────────────────┘  │  8. Control Tower workaround       │ │
 │                                    └────────────────────────────────────┘ │
@@ -61,9 +61,16 @@ Periodic is cheaper when a resource changes **more than 4× per day** ($0.012 / 
 
 | Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings |
 |---|---|---|---|---|---|
-| `AWS::EC2::SecurityGroup` | 500 | 45 | 11.1× | ✅ Switch to periodic | $33.30 |
+| `AWS::EC2::Subnet` | 217 | 2 | 108.5× | ✅ Switch to periodic | $18.78 |
+| `AWS::EC2::NetworkInterface` | 162 | 5 | 32.4× | ✅ Switch to periodic | $12.78 |
 | `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 |
-| `AWS::Lambda::Function` | 200 | 50 | 4.0× | ⚠️ Borderline | $0.00 |
+
+### Per-Resource-ID Detail (periodic candidates)
+| Account ID | Region | Resource Type | Resource ID | Changes/Day | Periodic Saves? |
+|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-06e0134b | 108 | ✅ Yes (108× > 4×) |
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-007336a4 | 108 | ✅ Yes (108× > 4×) |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-0abc123 | 50 | ✅ Yes (50× > 4×) |
 
 ### Top CI Contributors by Account and Region
 | Account ID | Region | Resource Type | Monthly CIs | Monthly Cost | % of Total |
