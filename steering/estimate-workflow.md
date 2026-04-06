@@ -3,9 +3,50 @@
 ## Overview
 This workflow uses CloudTrail organization trail data to estimate AWS Config configuration item (CI) costs. It queries non-read-only management events from CloudTrail, maps them to AWS Config supported resource types, and calculates estimated monthly costs.
 
-## Step 1: Verify CloudTrail Organization Trail
+## Step 1: Determine Multi-Account Data Access Method
 
-Run `aws cloudtrail describe-trails` and confirm an organization trail exists with `IsOrganizationTrail: true` and `IsMultiRegionTrail: true`. If not, warn the user that estimates will be limited to the current account/region.
+Run `aws cloudtrail describe-trails` to confirm an organization trail exists (`IsOrganizationTrail: true`, `IsMultiRegionTrail: true`).
+
+### Ask the user which data access method to use
+
+**STOP and WAIT for user input.** Present these options:
+
+#### Option A: CloudTrail Lake (recommended — fastest, multi-account)
+- Ask: "Do you have a CloudTrail Lake event data store?"
+- Check: `aws cloudtrail list-event-data-stores`
+- If yes → use `lake_query` with SQL to aggregate across all accounts in a single query
+- ✅ Multi-account, fast, no extra setup
+
+#### Option B: Athena on Org Trail S3 Bucket (multi-account, may need setup)
+- The org trail S3 bucket is typically in the **log archive account**, not the management account
+- Ask the user:
+  1. "Which account holds the org trail S3 bucket?" (usually log archive)
+  2. "Do you have Athena already set up to query that bucket?"
+  3. "Does the account you're running from have S3 read access to the log archive bucket?"
+- **If Athena is NOT set up**, the agent can create the Athena table automatically:
+  1. Create a database: `CREATE DATABASE IF NOT EXISTS cloudtrail_logs`
+  2. Create the CloudTrail table pointing to the org trail S3 bucket using the [standard CloudTrail Athena table DDL](https://docs.aws.amazon.com/athena/latest/ug/cloudtrail-logs.html#create-cloudtrail-table-ct)
+  3. The S3 bucket path is typically: `s3://<org-trail-bucket>/AWSLogs/<org-id>/`
+- **If cross-account access is needed** (agent running in management account, bucket in log archive):
+  - The log archive bucket policy must allow the management account to read
+  - Or the user must provide a role ARN in the log archive account to assume
+  - Ask: "Can you provide the S3 bucket name and confirm the account I'm running from has read access? If not, we can use Option A or C instead."
+- **IMPORTANT**: Do NOT attempt to create Athena resources or access S3 without confirming permissions with the user first.
+
+#### Option C: `lookup_events` (single account only — fallback)
+- No setup required, works immediately
+- **Limitation**: Only returns events for the **current account** — does NOT query across the organization even with an org trail
+- Slow: max 50 events per API call, requires pagination, rate limited (~2 req/sec)
+- Use this only if Lake and Athena are not available
+- **Clearly state in the output**: "This estimate covers only account XXXXXXXXXXXX. For org-wide estimates, CloudTrail Lake or Athena is required."
+
+| Method | Multi-Account | Speed | Setup Required | Cross-Account Access |
+|---|---|---|---|---|
+| CloudTrail Lake | ✅ All accounts | Fast (single SQL) | Event data store must exist | No |
+| Athena on org trail S3 | ✅ All accounts | Medium | Athena table (agent can create) | Yes — need S3 read on log archive bucket |
+| `lookup_events` | ❌ Current account only | Slow (paginated) | None | No |
+
+**WAIT for user to choose before proceeding to Step 2.**
 
 ## Step 2: Query CloudTrail for Write Events
 
