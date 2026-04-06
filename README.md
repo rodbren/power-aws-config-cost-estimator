@@ -15,16 +15,16 @@ Estimate AWS Config recorder costs **before enabling it** and optimize **existin
 │  │  (Config not yet enabled)   │  │  (Config already running)          │ │
 │  │                             │  │                                    │ │
 │  │  1. Verify org trail        │  │  1. Analyze current Config spend   │ │
-│  │  2. Choose data method:     │  │  2. List Config aggregators →      │ │
-│  │     Lake / Athena / Lookup  │  │     user picks one (WAIT)          │ │
-│  │  3. Query CloudTrail        │  │  3. Top 10 resource types from     │ │
-│  │     (7 days default)        │  │     aggregator (confirm with user) │ │
-│  │  4. Map eventSource →       │  │  4. CloudTrail deep-dive ALL top   │ │
-│  │     AWS:: resource types    │  │     10 → specific AWS:: types      │ │
+│  │  2. Choose data method:     │  │  2. Top 10 CI contributors via     │ │
+│  │     Lake / Athena / Lookup  │  │     Athena on Config S3 (primary)  │ │
+│  │  3. Query CloudTrail        │  │     or CloudWatch (single-account) │ │
+│  │     (7 days default)        │  │  3. Deep-dive top 10 via Athena    │ │
+│  │  4. Map eventSource →       │  │     on Config S3 or CloudTrail     │ │
+│  │     AWS:: resource types    │  │  4. 75% CI reduction threshold     │ │
 │  │  5. Continuous estimate:    │  │  5. Per-resource-ID change freq    │ │
-│  │     total events × $0.003   │  │  6. 4× rule per resource ID        │ │
-│  │  6. Periodic estimate:      │  │  7. Dependencies + exclusions      │ │
-│  │     unique resources/day    │  │  8. Control Tower workaround       │ │
+│  │     total events × $0.003   │  │  6. Dependencies + exclusions      │ │
+│  │  6. Periodic estimate:      │  │  7. Control Tower workaround       │ │
+│  │     unique resources/day    │  │                                    │ │
 │  │     × 30 × $0.012           │  │                                    │ │
 │  └─────────────────────────────┘  └────────────────────────────────────┘ │
 │                                                                          │
@@ -97,11 +97,12 @@ Periodic must produce **≥75% fewer CIs** than continuous to offset the 4× pri
 | 123456789012 | us-east-1 | `AWS::S3::Bucket` | 2,400 | 900 | 63% | ⚠️ Borderline | -$3.60 |
 
 ### Per-Resource-ID Detail (periodic candidates)
-| Account ID | Region | Resource Type | Resource ID | Changes/Day | Periodic Saves? |
-|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-06e0134b | 108 | ✅ Yes (108× > 4×) |
-| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-007336a4 | 108 | ✅ Yes (108× > 4×) |
-| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-0abc123 | 50 | ✅ Yes (50× > 4×) |
+| Account ID | Region | Resource Type | Resource ID | Changes/Day | CI Reduction | Periodic Saves? |
+|---|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-06e0134b | 108 | 99% | ✅ Yes |
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-007336a4 | 108 | 99% | ✅ Yes |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-0abc123 | 50 | 97% | ✅ Yes |
+| 123456789012 | us-east-1 | `AWS::EC2::Volume` | vol-0def456 | 3 | 25% | ❌ No — below 75% |
 
 ### Indirect Relationships — Hidden CI Multiplier
 Changes to some EC2/VPC resources generate **extra CIs** for related resources:
@@ -195,9 +196,9 @@ power-aws-config-cost-estimator/
 └── steering/
     ├── estimate-workflow.md              # Cost estimation: multi-account access,
     │                                     #   130+ eventSource mappings, pricing
-    └── optimization-workflow.md          # Cost optimization: aggregator-first,
-                                          #   dependencies, duplicates, change
-                                          #   frequency, exclusions, Control Tower
+    └── optimization-workflow.md          # Cost optimization: Athena-first CI analysis,
+                                          #   dependencies, duplicates, 75% threshold,
+                                          #   exclusions, Control Tower
 ```
 
 ## References
