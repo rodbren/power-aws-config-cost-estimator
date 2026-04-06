@@ -20,27 +20,46 @@ Estimate AWS Config recorder costs **before enabling it** and optimize **existin
 │  │  3. Query CloudTrail        │  │  3. Top 10 resource types from     │ │
 │  │     (7 days default)        │  │     aggregator (confirm with user) │ │
 │  │  4. Map eventSource →       │  │  4. CloudTrail deep-dive ALL top   │ │
-│  │     total events × $0.003   │  │     10 → specific AWS:: types      │ │
-│  │  5. Periodic estimate:      │  │  5. Per-resource-ID change freq    │ │
-│  │     unique resources/day    │  │  6. 4× rule per resource ID        │ │
-│  │     × 30 × $0.012           │  │  7. Dependencies + exclusions      │ │
-│  └─────────────────────────────┘  │  8. Control Tower workaround       │ │
-│                                    └────────────────────────────────────┘ │
+│  │     AWS:: resource types    │  │     10 → specific AWS:: types      │ │
+│  │  5. Continuous estimate:    │  │  5. Per-resource-ID change freq    │ │
+│  │     total events × $0.003   │  │  6. 4× rule per resource ID        │ │
+│  │  6. Periodic estimate:      │  │  7. Dependencies + exclusions      │ │
+│  │     unique resources/day    │  │  8. Control Tower workaround       │ │
+│  │     × 30 × $0.012           │  │                                    │ │
+│  └─────────────────────────────┘  └────────────────────────────────────┘ │
 │                                                                          │
 │  Runs from: Management Account, Config Delegated Admin,                  │
 │             or CloudTrail Delegated Admin                                 │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
+## Key Difference: Continuous vs Periodic
+
+| | Continuous | Periodic |
+|---|---|---|
+| **What triggers a CI** | Every resource change | 1 per unique resource per day |
+| **Price per CI** | $0.003 | $0.012 |
+| **Best for** | Resources that rarely change | Resources that change frequently |
+| **The 4× rule** | Cheaper when < 4 changes/day | Cheaper when > 4 changes/day |
+| **Example**: EC2 instance modified 50×/day | 50 CIs = $0.15/day | 1 CI = $0.012/day |
+
+## Multi-Account Data Access
+
+| Method | Multi-Account | Speed | Setup Required |
+|---|---|---|---|
+| CloudTrail Lake | ✅ All accounts | Fast (single SQL) | Event data store must exist |
+| Athena on org trail S3 | ✅ All accounts | Medium | Athena table (agent can create) — S3 bucket typically in log archive account |
+| `lookup_events` | ❌ Current account only | Slow (paginated) | None |
+
 ## Cost Estimation — Example Output
 
 ### Continuous Recording
 **Analysis period**: 7 days | **Extrapolation**: ×4.29 (30 ÷ 7 — scales partial data to a full month)
 
-| Account ID | Region | Event Source | Events (7d) | Est. Monthly CIs | Est. Monthly Cost |
+| Account ID | Region | Resource Type | Events (7d) | Est. Monthly CIs | Est. Monthly Cost |
 |---|---|---|---|---|---|
-| 123456789012 | us-east-1 | ec2.amazonaws.com | 1,200 | 5,143 | $15.43 |
-| 123456789012 | us-east-1 | s3.amazonaws.com | 350 | 1,500 | $4.50 |
+| 123456789012 | us-east-1 | `AWS::EC2::Instance` | 1,200 | 5,143 | $15.43 |
+| 123456789012 | us-east-1 | `AWS::S3::Bucket` | 350 | 1,500 | $4.50 |
 | **TOTAL** | | | **1,550** | **6,643** | **$19.93** |
 
 ### Periodic Recording
@@ -48,29 +67,13 @@ Estimate AWS Config recorder costs **before enabling it** and optimize **existin
 
 > ⚠️ Weekly and monthly projections are based on a single day's data. Re-run on different days for higher accuracy.
 
-| Account ID | Region | Event Source | Unique Resources (1d) | Est. Weekly CIs | Est. Monthly CIs | Est. Monthly Cost |
+| Account ID | Region | Resource Type | Unique Resources (1d) | Est. Weekly CIs | Est. Monthly CIs | Est. Monthly Cost |
 |---|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | ec2.amazonaws.com | 45 | 315 | 1,350 | $16.20 |
-| 123456789012 | us-east-1 | s3.amazonaws.com | 20 | 140 | 600 | $7.20 |
+| 123456789012 | us-east-1 | `AWS::EC2::Instance` | 45 | 315 | 1,350 | $16.20 |
+| 123456789012 | us-east-1 | `AWS::S3::Bucket` | 20 | 140 | 600 | $7.20 |
 | **TOTAL** | | | **65** | **455** | **1,950** | **$23.40** |
 
 ## Cost Optimization — Example Output
-
-### The 4× Rule: Continuous vs Periodic per Resource Type
-Periodic is cheaper when a resource changes **more than 4× per day** ($0.012 / $0.003 = 4).
-
-| Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings |
-|---|---|---|---|---|---|
-| `AWS::EC2::Subnet` | 217 | 2 | 108.5× | ✅ Switch to periodic | $18.78 |
-| `AWS::EC2::NetworkInterface` | 162 | 5 | 32.4× | ✅ Switch to periodic | $12.78 |
-| `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 |
-
-### Per-Resource-ID Detail (periodic candidates)
-| Account ID | Region | Resource Type | Resource ID | Changes/Day | Periodic Saves? |
-|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-06e0134b | 108 | ✅ Yes (108× > 4×) |
-| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-007336a4 | 108 | ✅ Yes (108× > 4×) |
-| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-0abc123 | 50 | ✅ Yes (50× > 4×) |
 
 ### Top CI Contributors by Account and Region
 | Account ID | Region | Resource Type | Monthly CIs | Monthly Cost | % of Total |
@@ -78,6 +81,20 @@ Periodic is cheaper when a resource changes **more than 4× per day** ($0.012 / 
 | 123456789012 | us-east-1 | `AWS::EC2::SecurityGroup` | 15,000 | $45.00 | 25% |
 | 123456789012 | us-east-1 | `AWS::EC2::Instance` | 10,000 | $30.00 | 17% |
 | 234567890123 | eu-west-1 | `AWS::EC2::NetworkInterface` | 8,000 | $24.00 | 13% |
+
+### Continuous vs Periodic Analysis (4× rule)
+| Account ID | Region | Resource Type | Avg Events/Day | Avg Unique/Day | Change Ratio | Recommendation | Est. Monthly Savings |
+|---|---|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | 217 | 2 | 108.5× | ✅ Periodic | $18.78 |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | 162 | 5 | 32.4× | ✅ Periodic | $12.78 |
+| 123456789012 | us-east-1 | `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Continuous | -$3.60 |
+
+### Per-Resource-ID Detail (periodic candidates)
+| Account ID | Region | Resource Type | Resource ID | Changes/Day | Periodic Saves? |
+|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-06e0134b | 108 | ✅ Yes (108× > 4×) |
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-007336a4 | 108 | ✅ Yes (108× > 4×) |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-0abc123 | 50 | ✅ Yes (50× > 4×) |
 
 ### Indirect Relationships — Hidden CI Multiplier
 Changes to some EC2/VPC resources generate **extra CIs** for related resources:
@@ -91,11 +108,11 @@ Changes to some EC2/VPC resources generate **extra CIs** for related resources:
 Customers can disable indirect relationships **per account** via [AWS Support case](https://docs.aws.amazon.com/config/latest/developerguide/faq.html#config-recording).
 
 ### Dependency Impact Matrix
-| Recommendation | Security Hub | Control Tower | Firewall Mgr | Backup Audit Mgr | SSM Compliance |
-|---|---|---|---|---|---|
-| Exclude ResourceCompliance | ⚠️ Stale | ✅ OK | ✅ OK | ✅ OK | ⚠️ No history |
-| Switch EC2 to periodic | ✅ OK | ✅ OK | ❌ Breaks | ✅ OK | ⚠️ Delayed |
-| Exclude Backup types | ✅ OK | ✅ OK | ✅ OK | ❌ Breaks | ✅ OK |
+| Recommendation | Security Hub CSPM | Control Tower | Firewall Mgr | Backup Audit Mgr | SSM Compliance | Audit Mgr | Trusted Advisor |
+|---|---|---|---|---|---|---|---|
+| Exclude ResourceCompliance | ⚠️ Stale | ✅ OK | ✅ OK | ✅ OK | ⚠️ No history | ⚠️ Less evidence | ✅ OK |
+| Switch EC2 to periodic | ✅ OK | ✅ OK | ❌ Breaks | ✅ OK | ⚠️ Delayed | ✅ OK | ✅ OK |
+| Exclude Backup types | ✅ OK | ✅ OK | ✅ OK | ❌ Breaks | ✅ OK | ⚠️ Less evidence | ✅ OK |
 
 ## Service Dependencies Checked
 
@@ -156,7 +173,7 @@ https://github.com/rodbren/power-aws-config-cost-estimator
 | Estimation window | 7 days | 1–90 days |
 | Periodic sample day | Yesterday | Any specific day |
 | Optimization analysis | 7 days of CloudTrail | 1–90 days |
-| Account scope | Org-wide | Specific accounts |
+| Account scope | Org-wide (Lake/Athena) or single (lookup_events) | Specific accounts |
 
 ## Project Structure
 
@@ -167,9 +184,11 @@ power-aws-config-cost-estimator/
 ├── README.md                             # This file
 ├── CHANGELOG.md                          # Version history
 └── steering/
-    ├── estimate-workflow.md              # Cost estimation workflow + 130+ eventSource mappings
-    └── optimization-workflow.md          # Cost optimization: dependencies, duplicates,
-                                          #   change frequency, exclusions, Control Tower
+    ├── estimate-workflow.md              # Cost estimation: multi-account access,
+    │                                     #   130+ eventSource mappings, pricing
+    └── optimization-workflow.md          # Cost optimization: aggregator-first,
+                                          #   dependencies, duplicates, change
+                                          #   frequency, exclusions, Control Tower
 ```
 
 ## References
@@ -183,6 +202,7 @@ power-aws-config-cost-estimator/
 - [AWS Config Service Integrations](https://docs.aws.amazon.com/config/latest/developerguide/service-integrations.html)
 - [AWS Backup Audit Manager](https://docs.aws.amazon.com/aws-backup/latest/devguide/aws-backup-audit-manager.html)
 - [AWS Systems Manager Compliance](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-compliance.html)
+- [Indirect Relationships in AWS Config](https://docs.aws.amazon.com/config/latest/developerguide/faq.html#config-recording)
 - [Kiro Powers Documentation](https://kiro.dev/docs/powers/create/)
 
 ## Changelog
