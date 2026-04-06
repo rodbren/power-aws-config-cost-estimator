@@ -1,9 +1,10 @@
 # AWS Config Cost Optimization Workflow
 
 ## ⚠️ CRITICAL EXECUTION ORDER — DO NOT SKIP
-1. **FIRST**: Check Config aggregators → ask user to pick one → pull top 10 resource types from Config data
-2. **THEN**: Only after identifying top 10 from Config, go to CloudTrail for deep-dive on those 10 only
-3. **NEVER** start with CloudTrail. CloudTrail is slow and should only be used for targeted analysis of top contributors already identified from Config data.
+1. **FIRST**: Get actual CI counts via Athena on Config S3 delivery bucket (multi-account) or CloudWatch metrics (single-account) → identify top 10 resource types by CI count
+2. **THEN**: Deep-dive top 10 via Athena on Config S3 or CloudTrail for per-resource-ID analysis
+3. **NEVER** start with CloudTrail. CloudTrail is a fallback for deep-dive only.
+4. **Config aggregator shows resource counts, NOT CI counts** — use as supplementary context only.
 
 ## Overview
 This workflow analyzes an **existing** AWS Config deployment to identify cost optimization opportunities. It correlates Config recorder data, rule evaluations, CloudTrail events, and service dependencies to provide actionable recommendations.
@@ -213,23 +214,23 @@ For each top 10 resource type:
 ### Output format — ALL columns MANDATORY
 
 #### Summary table (by specific AWS:: resource type, per account/region)
-| Account ID | Region | Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings |
+| Account ID | Region | Resource Type | Continuous CIs/mo | Periodic CIs/mo | CI Reduction | Recommendation | Est. Monthly Savings |
 |---|---|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | 217 | 2 | 108.5× | ✅ Periodic | $18.78 |
-| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | 162 | 5 | 32.4× | ✅ Periodic | $12.78 |
-| 123456789012 | us-east-1 | `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Continuous | -$3.60 |
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | 6,510 | 60 | 99% | ✅ Periodic | $18.78 |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | 4,860 | 150 | 97% | ✅ Periodic | $12.78 |
+| 123456789012 | us-east-1 | `AWS::S3::Bucket` | 2,400 | 900 | 63% | ❌ Continuous | -$3.60 |
 
 #### MANDATORY: Per-Resource-ID Analysis for ALL Periodic Candidates
-**For every resource type recommended for periodic, list EACH individual resource ID with its own change frequency.** This is critical — the 4× rule must be validated per resource, not just per type. Some individual resources may be low-churn even if the type average is high.
+**For every resource type recommended for periodic, list EACH individual resource ID with its own CI reduction %.** The 75% threshold must be validated per resource, not just per type.
 
-| Account ID | Region | Resource Type | Resource ID | Changes/Day | Change Ratio | Periodic Saves? |
+| Account ID | Region | Resource Type | Resource ID | Changes/Day | CI Reduction | Periodic Saves? |
 |---|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-06e0134b | 108 | 108× | ✅ Yes |
-| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-007336a4 | 108 | 108× | ✅ Yes |
-| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-0abc123 | 50 | 50× | ✅ Yes |
-| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-9xyz456 | 2 | 2× | ❌ No — this resource is low-churn |
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-06e0134b | 108 | 99% | ✅ Yes (≥75%) |
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | subnet-007336a4 | 108 | 99% | ✅ Yes (≥75%) |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-0abc123 | 50 | 97% | ✅ Yes (≥75%) |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | eni-9xyz456 | 2 | 50% | ❌ No — below 75% threshold |
 
-**If any individual resource within a periodic-recommended type has a ratio ≤ 4**, flag it — switching the whole type to periodic still saves overall, but note that this specific resource would be cheaper under continuous.
+**If any individual resource within a periodic-recommended type has CI reduction below 75%**, flag it — switching the whole type to periodic still saves overall, but note that this specific resource would be cheaper under continuous.
 
 ### Important: Query the right days
 - Query **at least 7 days** for a representative sample
@@ -437,7 +438,7 @@ Customers can disable indirect relationships **per account** via an AWS Support 
 | Control Tower managed | Yes/No |
 | Running from | Management / Config Delegated Admin / CT Delegated Admin |
 
-### Recording Frequency Recommendations (from CloudTrail analysis)
+### Recording Frequency Recommendations (from Config CI data)
 
 **Always use full AWS Config resource type names** (e.g., `AWS::EC2::Instance`, `AWS::EC2::SecurityGroup`, `AWS::S3::Bucket`) — never generic service names like "EC2" or "S3".
 
@@ -455,20 +456,20 @@ Customers can disable indirect relationships **per account** via an AWS Support 
 #### MANDATORY: Per-Resource-ID Detail for Periodic Candidates
 For every resource type recommended for periodic recording, **list the individual resource IDs** and their daily change count. This shows the customer exactly which resources are high-churn and validates the periodic recommendation.
 
-| Account ID | Region | Resource Type | Resource ID | Avg Changes/Day | Periodic Saves? |
-|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | `AWS::EC2::SecurityGroup` | sg-0a1b2c3d4e5f | 45 | ✅ Yes (45× > 4×) |
-| 123456789012 | us-east-1 | `AWS::EC2::SecurityGroup` | sg-1f2e3d4c5b6a | 12 | ✅ Yes (12× > 4×) |
-| 123456789012 | us-east-1 | `AWS::EC2::Instance` | i-0abc123def456 | 80 | ✅ Yes (80× > 4×) |
-| 234567890123 | eu-west-1 | `AWS::EC2::Instance` | i-9zyx876wvu543 | 2 | ❌ No (2× < 4×) |
+| Account ID | Region | Resource Type | Resource ID | Avg Changes/Day | CI Reduction | Periodic Saves? |
+|---|---|---|---|---|---|---|
+| 123456789012 | us-east-1 | `AWS::EC2::SecurityGroup` | sg-0a1b2c3d4e5f | 45 | 98% | ✅ Yes (≥75%) |
+| 123456789012 | us-east-1 | `AWS::EC2::SecurityGroup` | sg-1f2e3d4c5b6a | 12 | 92% | ✅ Yes (≥75%) |
+| 123456789012 | us-east-1 | `AWS::EC2::Instance` | i-0abc123def456 | 80 | 99% | ✅ Yes (≥75%) |
+| 234567890123 | eu-west-1 | `AWS::EC2::Instance` | i-9zyx876wvu543 | 2 | 50% | ❌ No (<75%) |
 
 #### Continuous vs Periodic Analysis per Resource Type
-| Resource Type | Avg Events/Day | Avg Unique Resources/Day | Change Ratio | Recommendation | Est. Monthly Savings | Dependencies to Check |
+| Resource Type | Continuous CIs/mo | Periodic CIs/mo | CI Reduction | Recommendation | Est. Monthly Savings | Dependencies to Check |
 |---|---|---|---|---|---|---|
-| `AWS::EC2::SecurityGroup` | 500 | 45 | 11.1× | ✅ Periodic | $33.30 | Firewall Manager, indirect relationships |
-| `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Keep continuous | -$3.60 | None |
-| `AWS::Lambda::Function` | 200 | 50 | 4.0× | ⚠️ Borderline | $0.00 | None |
-| `AWS::IAM::Role` | 150 | 120 | 1.25× | ❌ Keep continuous | -$32.40 | Global resource — record in 1 region only |
+| `AWS::EC2::SecurityGroup` | 15,000 | 1,350 | 91% | ✅ Periodic | $33.30 | Firewall Manager, indirect relationships |
+| `AWS::S3::Bucket` | 2,400 | 900 | 63% | ❌ Keep continuous | -$3.60 | None |
+| `AWS::Lambda::Function` | 6,000 | 1,500 | 75% | ⚠️ Borderline | $0.00 | Ephemeral — check if <24h |
+| `AWS::IAM::Role` | 4,500 | 3,600 | 20% | ❌ Keep continuous | -$32.40 | Global resource — record in 1 region only |
 
 ### Other Recommendations (ranked by savings)
 | # | Recommendation | Est. Savings/mo | Risk | Requires Mgmt Account |

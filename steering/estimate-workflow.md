@@ -308,9 +308,9 @@ Format the output as two tables:
 ### Continuous Recording Estimate
 **Analysis period**: X days (YYYY-MM-DD to YYYY-MM-DD) | **Extrapolation factor**: 30/X = Y.YY
 
-| Account ID | Region | Event Source | Events (period) | Est. Monthly CIs | Est. Monthly Cost |
+| Account ID | Region | Resource Type | Events (period) | Est. Monthly CIs | Est. Monthly Cost |
 |---|---|---|---|---|---|
-| 123456789012 | us-east-1 | ec2.amazonaws.com | 1,163 | 4,984 | $14.95 |
+| 123456789012 | us-east-1 | `AWS::EC2::Instance` | 1,163 | 4,984 | $14.95 |
 | ... | ... | ... | ... | ... | ... |
 | **TOTAL** | | | **X** | **Y** | **$A.AA** |
 
@@ -319,9 +319,9 @@ Format the output as two tables:
 
 > ⚠️ **Forecasting disclaimer**: Weekly and monthly projections are based on a single day's data. Actual costs vary by daily activity. Re-run on different days for higher accuracy.
 
-| Account ID | Region | Event Source | Unique Resources (1 day) | Est. Weekly CIs | Est. Monthly CIs | Est. Weekly Cost | Est. Monthly Cost |
+| Account ID | Region | Resource Type | Unique Resources (1 day) | Est. Weekly CIs | Est. Monthly CIs | Est. Weekly Cost | Est. Monthly Cost |
 |---|---|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | ec2.amazonaws.com | 45 | 315 | 1,350 | $3.78 | $16.20 |
+| 123456789012 | us-east-1 | `AWS::EC2::Instance` | 45 | 315 | 1,350 | $3.78 | $16.20 |
 | ... | ... | ... | ... | ... | ... | ... | ... |
 | **TOTAL** | | | **X** | **Y** | **Z** | **$A.AA** | **$B.BB** |
 
