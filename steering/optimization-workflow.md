@@ -44,9 +44,13 @@ Use Cost Explorer to understand current Config spend:
 **For org-wide CI counts, Athena on the Config delivery S3 bucket is the only accurate multi-account source.** CloudWatch `ConfigurationItemsRecorded` is per-account/per-region only and cannot be aggregated across the org without cross-account observability setup.
 
 1. Ask the user: "Where is your Config delivery S3 bucket?" (typically in log archive account)
-2. Ask: "Do you have Athena set up to query it?" If not, the agent can create the table (see Step 3a for DDL).
-3. Run the top 10 query from Step 3a to get actual CI counts grouped by account, region, and resource type
-4. This gives the **true multi-account CI ranking**
+2. Ask: "Do you have Athena set up to query it?"
+3. **If Athena is NOT set up**: Ask the user for permission to create the table: "I can create the Athena database and table for you. I'll need: bucket name, org ID, account IDs, and regions. May I proceed?"
+   - **WAIT for user confirmation before creating anything**
+   - If user agrees, create the database and table using the DDL from Step 3a (standard or Control Tower variant based on their environment)
+   - Verify the table works with a simple `SELECT COUNT(*) FROM awsconfig LIMIT 1`
+4. Run the top 10 query from Step 3a to get actual CI counts grouped by account, region, and resource type
+5. This gives the **true multi-account CI ranking**
 
 ### 2b: Single-Account — CloudWatch `ConfigurationItemsRecorded` Metric
 **Only use this for single-account analysis** or if Athena is not available.
