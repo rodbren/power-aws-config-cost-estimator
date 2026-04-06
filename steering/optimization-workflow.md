@@ -36,31 +36,41 @@ Use Cost Explorer to understand current Config spend:
 
 **From delegated admin**: May need billing access or CUR data. Alternatively, use CloudWatch `ConfigurationItemsRecorded` metrics per account.
 
-## Step 2: Identify Top CI Contributors (from Config data — NOT CloudTrail)
+## Step 2: Identify Top 10 CI Contributors
 
-**Start from AWS Config data, NOT CloudTrail.** CloudTrail is only used later for deep-dive on top contributors.
+**Start from Config data, NOT CloudTrail.** CloudTrail is only used later for deep-dive.
 
-### 2a: List Config Aggregators and Ask User to Choose
+### 2a: Multi-Account — Athena on Config S3 Delivery Bucket (preferred)
+**For org-wide CI counts, Athena on the Config delivery S3 bucket is the only accurate multi-account source.** CloudWatch `ConfigurationItemsRecorded` is per-account/per-region only and cannot be aggregated across the org without cross-account observability setup.
+
+1. Ask the user: "Where is your Config delivery S3 bucket?" (typically in log archive account)
+2. Ask: "Do you have Athena set up to query it?" If not, the agent can create the table (see Step 3a for DDL).
+3. Run the top 10 query from Step 3a to get actual CI counts grouped by account, region, and resource type
+4. This gives the **true multi-account CI ranking**
+
+### 2b: Single-Account — CloudWatch `ConfigurationItemsRecorded` Metric
+**Only use this for single-account analysis** or if Athena is not available.
+
+1. Query CloudWatch metric `AWS/Config` → `ConfigurationItemsRecorded` with dimension `ResourceType`
+2. Use a period of **7 days** (or customer-specified)
+3. Sum the CI counts per `ResourceType`
+4. **Clearly state**: "This data covers only account XXXXXXXXXXXX in region YYYY. For org-wide analysis, Athena on the Config S3 bucket is required."
+
+### 2c: Supplementary — Config Aggregator for Resource Inventory Context
+The Config aggregator shows **resource counts** (how many resources exist), **NOT CI counts**. A resource type with 35 resources could generate 15,000 CIs if those resources change frequently. **Do NOT use aggregator resource counts to rank top CI contributors.**
+
+Use aggregator data as supplementary context only:
+- High CI count + few resources = high churn per resource (strong periodic candidate)
+- High CI count + many resources = normal activity (may not benefit from periodic)
+
 1. Run `aws configservice describe-configuration-aggregators`
-2. Present the full list of aggregator names to the user
-3. **STOP and WAIT for user input** — ask: "Which aggregator would you like me to use?"
-4. **Do NOT proceed until the user selects one.** Do NOT auto-select. Do NOT fall through to CloudTrail.
-5. If no aggregators exist, tell the user and ask if they want to use CloudWatch metrics instead. **WAIT for confirmation.**
-
-### 2b: Query the User-Selected Aggregator
-1. Run `aws configservice get-aggregate-discovered-resource-counts --configuration-aggregator-name <USER_SELECTED_NAME> --group-by-key RESOURCE_TYPE`
-2. If it returns **0 resource types**: tell the user this aggregator has no data (may be authorization-only or permissions issue). Ask if they want to try another aggregator or fall back to CloudWatch metrics. **WAIT for user input.**
-3. If it returns data: take the **top 10 resource types by count**
-
-### 2c: Fallback — CloudWatch Metrics (only if user agrees)
-**Only use this if the user confirms** after aggregators returned no data.
-- Query CloudWatch metric `ConfigurationItemsRecorded` with dimension `ResourceType` for the last 7 days
-- Take the **top 10 resource types by CI count**
+2. Present the list to the user, **STOP and WAIT** for them to choose one
+3. Run `aws configservice get-aggregate-discovered-resource-counts --configuration-aggregator-name <NAME> --group-by-key RESOURCE_TYPE`
+4. Cross-reference with CI counts from 2a or 2b
 
 ### 2d: Confirm Top 10 Before Proceeding
-**Present the top 10 resource types to the user.**
+**Present the top 10 resource types by CI count to the user.**
 **STOP and WAIT for confirmation before moving to Step 3.**
-Do NOT proceed to CloudTrail until the user has seen and approved the top 10 list.
 
 ## Step 3: Deep-Dive Top 10 — Actual CI Data + Recording Frequency Analysis
 
