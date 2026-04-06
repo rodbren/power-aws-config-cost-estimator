@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.6.0 (2026-04-06)
+- **Athena as primary multi-account CI source**: CloudWatch `ConfigurationItemsRecorded` is single-account only — Athena on Config S3 bucket is the only accurate multi-account source
+- **Config aggregator clarification**: Returns resource counts (how many exist), NOT CI counts — used as supplementary context only, not for ranking
+- **Agent auto-creates Athena tables**: If Athena not set up, agent asks user for permission, collects bucket/org/account/region info, creates database + table, and verifies before querying
+- **75% CI reduction threshold**: Replaces simplistic 4× rule for periodic recommendations
+
 ## v2.5.0 (2026-04-06)
 - **Athena on Config S3 as primary data source**: Optimization now queries actual CI counts from Config delivery bucket instead of CloudTrail estimates
 - **Athena table DDL included**: Standard single-account and Control Tower/org multi-account with partition projection

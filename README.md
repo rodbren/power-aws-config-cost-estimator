@@ -48,8 +48,11 @@ Estimate AWS Config recorder costs **before enabling it** and optimize **existin
 
 | Method | Multi-Account | Speed | Setup Required |
 |---|---|---|---|
-| CloudTrail Lake | ✅ All accounts | Fast (single SQL) | Event data store must exist |
-| Athena on org trail S3 | ✅ All accounts | Medium | Athena table (agent can create) — S3 bucket typically in log archive account |
+| Athena on Config S3 bucket | ✅ All accounts | Fast (SQL) | Athena table on Config delivery bucket — agent can create with permission |
+| CloudWatch CI metric | ❌ Current account only | Fast | None |
+| Config Aggregator | ⚠️ Shows resource counts, NOT CI counts | Fast | Aggregator must exist |
+| CloudTrail Lake | ✅ All accounts | Fast (SQL) | Event data store must exist |
+| Athena on org trail S3 | ✅ All accounts | Medium | Athena table — agent can create with permission |
 | `lookup_events` | ❌ Current account only | Slow (paginated) | None |
 
 ## Cost Estimation — Example Output
@@ -142,9 +145,11 @@ https://github.com/rodbren/power-aws-config-cost-estimator
 
 - **CloudTrail Organization Trail** with management events enabled
 - AWS credentials with `cloudtrail:LookupEvents`, `cloudtrail:DescribeTrails`, `config:DescribeConfigRules` permissions
-- For multi-account forecasting (choose one):
+- For multi-account CI analysis:
+  - **Athena on Config S3 delivery bucket**: Only accurate multi-account CI source — agent can create the table with your permission (bucket typically in log archive account)
+- For multi-account CloudTrail deep-dive (choose one):
   - **CloudTrail Lake**: Event data store with org events (recommended)
-  - **Athena**: Read access to org trail S3 bucket (typically in log archive account) — agent can create the Athena table
+  - **Athena on org trail S3**: Agent can create the table with your permission
   - **`lookup_events`**: No extra setup, but single-account only
 - For optimization: access to management account or delegated admin account
 
