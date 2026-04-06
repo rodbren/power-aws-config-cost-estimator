@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.4.0 (2026-04-06)
+- **Multi-account data access decision tree**: Forecasting module now asks user to choose between CloudTrail Lake, Athena, or `lookup_events` before proceeding
+- **CloudTrail Lake support**: Single SQL query across all org accounts (recommended)
+- **Athena auto-setup**: Agent can create Athena table on org trail S3 bucket if permissions exist — handles cross-account log archive bucket scenario
+- **`lookup_events` limitation clearly stated**: Single-account only, output labeled accordingly
+- **Cross-account access handling**: Asks user about log archive bucket location and S3 read permissions before attempting anything
+
 ## v2.3.0 (2026-04-02)
 - **Config-first workflow enforced**: Critical execution order at top — Config aggregators first, CloudTrail second, never skip
 - **Aggregator selection**: Lists all aggregators, STOPS and WAITS for user to pick one before proceeding

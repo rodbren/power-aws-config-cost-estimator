@@ -15,11 +15,11 @@ Estimate AWS Config recorder costs **before enabling it** and optimize **existin
 │  │  (Config not yet enabled)   │  │  (Config already running)          │ │
 │  │                             │  │                                    │ │
 │  │  1. Verify org trail        │  │  1. Analyze current Config spend   │ │
-│  │  2. Query CloudTrail        │  │  2. List Config aggregators →      │ │
-│  │     (7 days default)        │  │     user picks one (WAIT)          │ │
-│  │  3. Map eventSource →       │  │  3. Top 10 resource types from     │ │
-│  │     Config resource types   │  │     aggregator (confirm with user) │ │
-│  │  4. Continuous estimate:    │  │  4. CloudTrail deep-dive ALL top   │ │
+│  │  2. Choose data method:     │  │  2. List Config aggregators →      │ │
+│  │     Lake / Athena / Lookup  │  │     user picks one (WAIT)          │ │
+│  │  3. Query CloudTrail        │  │  3. Top 10 resource types from     │ │
+│  │     (7 days default)        │  │     aggregator (confirm with user) │ │
+│  │  4. Map eventSource →       │  │  4. CloudTrail deep-dive ALL top   │ │
 │  │     total events × $0.003   │  │     10 → specific AWS:: types      │ │
 │  │  5. Periodic estimate:      │  │  5. Per-resource-ID change freq    │ │
 │  │     unique resources/day    │  │  6. 4× rule per resource ID        │ │
@@ -121,6 +121,10 @@ https://github.com/rodbren/power-aws-config-cost-estimator
 
 - **CloudTrail Organization Trail** with management events enabled
 - AWS credentials with `cloudtrail:LookupEvents`, `cloudtrail:DescribeTrails`, `config:DescribeConfigRules` permissions
+- For multi-account forecasting (choose one):
+  - **CloudTrail Lake**: Event data store with org events (recommended)
+  - **Athena**: Read access to org trail S3 bucket (typically in log archive account) — agent can create the Athena table
+  - **`lookup_events`**: No extra setup, but single-account only
 - For optimization: access to management account or delegated admin account
 
 ## MCP Servers Included
