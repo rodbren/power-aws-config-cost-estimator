@@ -40,7 +40,8 @@ Estimate AWS Config recorder costs **before enabling it** and optimize **existin
 | **What triggers a CI** | Every resource change | 1 per unique resource per day |
 | **Price per CI** | $0.003 | $0.012 |
 | **Best for** | Resources that rarely change | Resources that change frequently |
-| **The 4× rule** | Cheaper when < 4 changes/day | Cheaper when > 4 changes/day |
+| **Break-even** | — | Must produce ≥75% fewer CIs than continuous |
+| **Ephemeral resources (<24h)** | Captured | 0 CIs — visibility gap |
 | **Example**: EC2 instance modified 50×/day | 50 CIs = $0.15/day | 1 CI = $0.012/day |
 
 ## Multi-Account Data Access
@@ -82,12 +83,15 @@ Estimate AWS Config recorder costs **before enabling it** and optimize **existin
 | 123456789012 | us-east-1 | `AWS::EC2::Instance` | 10,000 | $30.00 | 17% |
 | 234567890123 | eu-west-1 | `AWS::EC2::NetworkInterface` | 8,000 | $24.00 | 13% |
 
-### Continuous vs Periodic Analysis (4× rule)
-| Account ID | Region | Resource Type | Avg Events/Day | Avg Unique/Day | Change Ratio | Recommendation | Est. Monthly Savings |
+### Continuous vs Periodic Analysis (75% CI reduction threshold)
+Periodic must produce **≥75% fewer CIs** than continuous to offset the 4× price difference.
+
+| Account ID | Region | Resource Type | Continuous CIs/mo | Periodic CIs/mo | CI Reduction | Recommendation | Est. Monthly Savings |
 |---|---|---|---|---|---|---|---|
-| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | 217 | 2 | 108.5× | ✅ Periodic | $18.78 |
-| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | 162 | 5 | 32.4× | ✅ Periodic | $12.78 |
-| 123456789012 | us-east-1 | `AWS::S3::Bucket` | 80 | 30 | 2.7× | ❌ Continuous | -$3.60 |
+| 123456789012 | us-east-1 | `AWS::EC2::Subnet` | 6,510 | 60 | 99% | ✅ Periodic | $18.78 |
+| 123456789012 | us-east-1 | `AWS::EC2::NetworkInterface` | 4,860 | 150 | 97% | ✅ Periodic | $12.78 |
+| 123456789012 | us-east-1 | `AWS::EC2::Volume` | 4,469 | 3,179 | 29% | ❌ Continuous | -$24.71 |
+| 123456789012 | us-east-1 | `AWS::S3::Bucket` | 2,400 | 900 | 63% | ⚠️ Borderline | -$3.60 |
 
 ### Per-Resource-ID Detail (periodic candidates)
 | Account ID | Region | Resource Type | Resource ID | Changes/Day | Periodic Saves? |
@@ -193,6 +197,9 @@ power-aws-config-cost-estimator/
 
 ## References
 
+- [Best Practices for Analyzing AWS Config Recording Frequencies](https://aws.amazon.com/blogs/mt/best-practices-for-analyzing-aws-config-recording-frequencies/)
+- [How to Retrieve AWS Config Items Per Month](https://repost.aws/knowledge-center/retrieve-aws-config-items-per-month)
+- [Optimize AWS Config Costs](https://repost.aws/knowledge-center/optimize-aws-config)
 - [AWS Config Pricing](https://aws.amazon.com/config/pricing/)
 - [AWS Config Supported Resource Types](https://docs.aws.amazon.com/config/latest/developerguide/resource-config-reference.html)
 - [AWS Config Cost Optimization Best Practices](https://aws-samples.github.io/cloud-operations-best-practices/docs/guides/AWS%20Config/AWS%20Config%20Cost%20Optimization/)

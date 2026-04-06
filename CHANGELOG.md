@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.5.0 (2026-04-06)
+- **Athena on Config S3 as primary data source**: Optimization now queries actual CI counts from Config delivery bucket instead of CloudTrail estimates
+- **Athena table DDL included**: Standard single-account and Control Tower/org multi-account with partition projection
+- **75% CI reduction threshold**: Replaces simplistic 4× rule — periodic must produce 75% fewer CIs to offset 4× price
+- **Ephemeral resource visibility gaps**: Resources <24h get 0 CIs under periodic, flagged as risk
+- **Relationship cascade analysis**: Checks how changing one type affects related types (EMR → EC2, EBS, SSM, VPC)
+- **SSM ManagedInstanceInventory caveat**: Still records start/stop under periodic unlike plain EC2
+- **Ready-to-use Athena queries**: Top 10 by CI count, per-resource-ID, daily trend — all with account/region grouping
+- **CloudTrail as fallback only**: Used when Athena on Config S3 is not available
+- **New references**: Recording frequencies best practices blog, CI retrieval repost, optimize Config costs repost
+
 ## v2.4.0 (2026-04-06)
 - **Multi-account data access decision tree**: Forecasting module now asks user to choose between CloudTrail Lake, Athena, or `lookup_events` before proceeding
 - **CloudTrail Lake support**: Single SQL query across all org accounts (recommended)
