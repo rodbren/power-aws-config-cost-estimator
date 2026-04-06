@@ -62,40 +62,139 @@ Use Cost Explorer to understand current Config spend:
 **STOP and WAIT for confirmation before moving to Step 3.**
 Do NOT proceed to CloudTrail until the user has seen and approved the top 10 list.
 
-## Step 3: Deep-Dive ALL Top 10 Contributors via CloudTrail (org trail)
+## Step 3: Deep-Dive Top 10 — Actual CI Data + Recording Frequency Analysis
 
-**Query CloudTrail for ALL top 10 resource types from Step 2 — do not skip any.**
+### 3a: Primary method — Query actual Config CI data via Athena (preferred)
 
-**Requires access to the organization trail** — run from management account or CloudTrail delegated admin account.
+**If Config is already running, use actual CI counts from Config's S3 delivery bucket — this is more accurate than CloudTrail estimates.**
 
-### For EACH of the top 10 contributors (no exceptions):
-1. Map the Config resource type to its CloudTrail `eventSource` (e.g., `AWS::EC2::SecurityGroup` → `ec2.amazonaws.com`)
-2. **IMPORTANT**: When an eventSource like `ec2.amazonaws.com` covers multiple Config resource types, break down by **specific `AWS::` resource type** — use `resources[].type` or map from `eventName` (e.g., `CreateNetworkInterfacePermission` → `AWS::EC2::NetworkInterface`, `ModifySubnetAttribute` → `AWS::EC2::Subnet`). **Never report just the eventSource name.**
-3. Query the organization trail for **7 days** of non-read-only events
-4. Group by:
-   - **Account ID** (`recipientAccountId`) — MANDATORY
-   - **Region** (`awsRegion`) — MANDATORY
-   - **Specific `AWS::` resource type** — MANDATORY
-   - **Individual resource ID** — MANDATORY for periodic candidates
-   - **Day** for daily counts
-5. Count per group:
-   - **Total events per day** (= continuous CIs per day)
-   - **Unique resource IDs per day** (= periodic CIs per day)
-6. Calculate the **average daily change ratio**:
-```
-change_ratio = avg_total_events_per_day / avg_unique_resources_per_day
-```
-7. Apply the **4× rule**:
-   - `change_ratio > 4` → **recommend periodic**
-   - `change_ratio ≤ 4` → **recommend staying continuous**
-   - `change_ratio` between 3–5 → **flag as borderline**
+Ask the user:
+1. "Where is your Config delivery S3 bucket?" (typically in log archive account)
+2. "Do you have Athena set up to query it?"
+3. If not, the agent can create the Athena table. Ask for: bucket name, org ID, account IDs, regions.
 
-8. Calculate savings:
+#### Athena table for standard Config (single account)
+```sql
+CREATE EXTERNAL TABLE awsconfig (
+  fileversion string, configSnapshotId string,
+  configurationitems ARRAY < STRUCT <
+    configurationItemVersion:STRING, configurationItemCaptureTime:STRING,
+    configurationStateId:BIGINT, awsAccountId:STRING,
+    configurationItemStatus:STRING, resourceType:STRING,
+    resourceId:STRING, resourceName:STRING, ARN:STRING,
+    awsRegion:STRING, availabilityZone:STRING,
+    configurationStateMd5Hash:STRING, resourceCreationTime:STRING > >
+)
+ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
+LOCATION 's3://BUCKET-NAME/AWSLogs/ACCOUNT-ID/Config/REGION/';
 ```
-current_continuous_cost = avg_total_events_per_day × 30 × $0.003
-proposed_periodic_cost  = avg_unique_resources_per_day × 30 × $0.012
-monthly_savings         = current_continuous_cost - proposed_periodic_cost
+
+#### Athena table for Control Tower / Organizations (multi-account)
+```sql
+CREATE EXTERNAL TABLE awsconfig (
+  fileversion string, configSnapshotId string,
+  configurationitems ARRAY < STRUCT <
+    configurationItemVersion:STRING, configurationItemCaptureTime:STRING,
+    configurationStateId:BIGINT, awsAccountId:STRING,
+    configurationItemStatus:STRING, resourceType:STRING,
+    resourceId:STRING, resourceName:STRING, ARN:STRING,
+    awsRegion:STRING, availabilityZone:STRING,
+    configurationStateMd5Hash:STRING, resourceCreationTime:STRING > >
+)
+PARTITIONED BY (account string, region string, year string, month string, day string)
+ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
+LOCATION 's3://BUCKET-NAME/ORG-ID/AWSLogs/'
+TBLPROPERTIES (
+  'projection.enabled'='true',
+  'projection.account.type'='enum',
+  'projection.account.values'='ACCOUNT-ID1,ACCOUNT-ID2',
+  'projection.region.type'='enum',
+  'projection.region.values'='us-east-1,us-west-2',
+  'projection.year.interval'='1', 'projection.year.range'='2021,2121', 'projection.year.type'='integer',
+  'projection.month.interval'='1', 'projection.month.range'='1,12', 'projection.month.type'='integer',
+  'projection.day.interval'='1', 'projection.day.range'='1,31', 'projection.day.type'='integer',
+  'storage.location.template'='s3://BUCKET-NAME/ORG-ID/AWSLogs/${account}/Config/${region}/${year}/${month}/${day}/ConfigHistory/');
 ```
+
+#### Query: Top 10 resource types by actual CI count (per account/region)
+```sql
+SELECT configurationItem.awsAccountId, configurationItem.awsRegion,
+       configurationItem.resourceType,
+       COUNT(configurationItem.resourceId) AS NumberOfChanges
+FROM default.awsconfig
+CROSS JOIN UNNEST(configurationitems) AS t(configurationItem)
+WHERE "$path" LIKE '%ConfigHistory%'
+  AND configurationItem.configurationItemCaptureTime >= '2026-03-01T%'
+  AND configurationItem.configurationItemCaptureTime <= '2026-04-01T%'
+  AND configurationItem.configurationItemStatus NOT IN ('ResourceNotRecorded','ResourceDeletedNotRecorded')
+GROUP BY configurationItem.awsAccountId, configurationItem.awsRegion, configurationItem.resourceType
+ORDER BY NumberOfChanges DESC
+LIMIT 10
+```
+
+#### Query: Per-resource-ID changes for a specific type (for periodic analysis)
+```sql
+SELECT configurationItem.awsAccountId, configurationItem.awsRegion,
+       configurationItem.resourceType, configurationItem.resourceId,
+       COUNT(configurationItem.resourceId) AS NumberOfChanges
+FROM default.awsconfig
+CROSS JOIN UNNEST(configurationitems) AS t(configurationItem)
+WHERE "$path" LIKE '%ConfigHistory%'
+  AND configurationItem.configurationItemCaptureTime >= '2026-03-01T%'
+  AND configurationItem.configurationItemCaptureTime <= '2026-04-01T%'
+  AND configurationItem.configurationItemStatus NOT IN ('ResourceNotRecorded','ResourceDeletedNotRecorded')
+  AND configurationItem.resourceType = 'AWS::EC2::SecurityGroup'
+GROUP BY configurationItem.awsAccountId, configurationItem.awsRegion, configurationItem.resourceType, configurationItem.resourceId
+ORDER BY NumberOfChanges DESC
+```
+
+#### Query: CIs per day (trend analysis)
+```sql
+SELECT regexp_replace(configurationItem.configurationItemCaptureTime, '(.+)(T.+)', '$1') AS capture_date,
+       COUNT(*) AS NumberOfChanges
+FROM default.awsconfig
+CROSS JOIN UNNEST(configurationitems) AS t(configurationItem)
+WHERE "$path" LIKE '%ConfigHistory%'
+  AND configurationItem.configurationItemCaptureTime >= '2026-03-01T%'
+  AND configurationItem.configurationItemCaptureTime <= '2026-04-01T%'
+  AND configurationItem.configurationItemStatus NOT IN ('ResourceNotRecorded','ResourceDeletedNotRecorded')
+GROUP BY regexp_replace(configurationItem.configurationItemCaptureTime, '(.+)(T.+)', '$1')
+ORDER BY capture_date
+```
+
+**Note**: Always increment end date by 1 day (use `04-01` for March data) to avoid missing CIs that cross day boundaries.
+
+### 3b: Fallback — CloudTrail deep-dive (if Athena not available)
+
+If the customer cannot set up Athena on the Config S3 bucket, fall back to CloudTrail analysis for the top 10 resource types from Step 2:
+
+1. Map Config resource type to CloudTrail `eventSource`
+2. **Break down by specific `AWS::` resource type** — never report just the eventSource name
+3. Query org trail for 7 days of non-read-only events
+4. Group by Account ID, Region, specific `AWS::` resource type, individual resource ID, and day
+
+### 3c: Recording Frequency Decision — the 75% CI Reduction Threshold
+
+**The simple 4× rule is a starting point only.** Since periodic costs 4× more per CI ($0.012 vs $0.003), periodic must produce **at least 75% fewer CIs** to break even.
+
+For each top 10 resource type:
+1. **Get actual continuous CI count** (from Athena or CloudTrail)
+2. **Estimate periodic CI count**: unique resource IDs per day × 30 (periodic = 1 CI per unique resource per day, only if changed)
+3. **Calculate CI reduction %**: `(continuous - periodic) / continuous × 100`
+4. **Apply the 75% threshold**:
+   - Reduction ≥ 75% → ✅ **Recommend periodic**
+   - Reduction 50–74% → ⚠️ **Borderline** — may not save money
+   - Reduction < 50% → ❌ **Keep continuous** (periodic would cost MORE)
+5. **Check ephemeral resources**: Resources living <24h produce 0 CIs under periodic = visibility gap
+6. **Check relationship cascades**: Will related resource types still generate CIs? (e.g., EMR → EC2, EBS, SSM, VPC)
+7. **Check SSM ManagedInstanceInventory**: Still records start/stop under periodic, unlike plain EC2 instances
+
+#### Key considerations from AWS best practices
+- **Resource staticity**: How long do resources live? Ephemeral (<24h) vs long-running (>24h)
+- **Relationships**: What other resource types generate CIs when this type changes?
+- **Baseline change frequency**: How many CIs per day under continuous?
+- **Use case alignment**: Match recording frequency to your primary use case (inventory, compliance, security, audit)
+- **Environment separation**: Use different recording strategies per account (dev=periodic, prod=continuous)
 
 ### Output format — ALL columns MANDATORY
 
@@ -379,6 +478,9 @@ If recommendations require Config recorder changes, provide the [Control Tower C
 ## References
 
 - [AWS Config Cost Optimization Best Practices](https://aws-samples.github.io/cloud-operations-best-practices/docs/guides/AWS%20Config/AWS%20Config%20Cost%20Optimization/)
+- [Best Practices for Analyzing AWS Config Recording Frequencies](https://aws.amazon.com/blogs/mt/best-practices-for-analyzing-aws-config-recording-frequencies/)
+- [How to Retrieve AWS Config Items Per Month](https://repost.aws/knowledge-center/retrieve-aws-config-items-per-month)
+- [Optimize AWS Config Costs](https://repost.aws/knowledge-center/optimize-aws-config)
 - [Cost Optimization Recommendations for AWS Config](https://aws.amazon.com/blogs/mt/cost-optimization-recommendations-for-aws-config/)
 - [Discover Duplicate AWS Config Rules](https://aws.amazon.com/blogs/security/discover-duplicate-aws-config-rules-for-streamlined-compliance/)
 - [Customize AWS Config in Control Tower](https://aws.amazon.com/blogs/mt/customize-aws-config-resource-tracking-in-aws-control-tower-environment/)
@@ -387,5 +489,6 @@ If recommendations require Config recorder changes, provide the [Control Tower C
 - [AWS Config Delegated Administrator](https://docs.aws.amazon.com/config/latest/developerguide/aggregated-register-delegated-administrator.html)
 - [AWS Backup Audit Manager](https://docs.aws.amazon.com/aws-backup/latest/devguide/aws-backup-audit-manager.html)
 - [AWS Systems Manager Compliance](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-compliance.html)
+- [Indirect Relationships in AWS Config](https://docs.aws.amazon.com/config/latest/developerguide/faq.html#config-recording)
 - [Managing Recording Frequency](https://docs.aws.amazon.com/config/latest/developerguide/managing-recorder_console-change-recording-frequency.html)
 - [AWS Config Pricing](https://aws.amazon.com/config/pricing/)
